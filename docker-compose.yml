@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vop}
+      POSTGRES_DB: ${POSTGRES_DB:-vop}
+    volumes:
+      - vop_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vop}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment: &app_env
+      VOP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-vop}:${POSTGRES_PASSWORD:-vop}@postgres:5432/${POSTGRES_DB:-vop}
+      VOP_REDIS_URL: redis://redis:6379/0
+      VOP_APP_SECRET: ${VOP_APP_SECRET:-change-me-in-prod}
+      VOP_BOOTSTRAP_ORG_NAME: ${VOP_BOOTSTRAP_ORG_NAME:-Community Volunteers}
+      VOP_BOOTSTRAP_ADMIN_EMAIL: ${VOP_BOOTSTRAP_ADMIN_EMAIL:-admin@example.org}
+      VOP_PUBLIC_BASE_URL: ${VOP_PUBLIC_BASE_URL:-http://localhost:3000}
+      # Real email: set VOP_EMAIL_PROVIDER=smtp + SMTP_* (Postmark/SES). Default: dev inbox.
+      VOP_EMAIL_PROVIDER: ${VOP_EMAIL_PROVIDER:-inbox}
+      VOP_EMAIL_FROM: ${VOP_EMAIL_FROM:-Community Volunteers <no-reply@example.org>}
+      VOP_SMTP_HOST: ${VOP_SMTP_HOST:-}
+      VOP_SMTP_PORT: ${VOP_SMTP_PORT:-587}
+      VOP_SMTP_USERNAME: ${VOP_SMTP_USERNAME:-}
+      VOP_SMTP_PASSWORD: ${VOP_SMTP_PASSWORD:-}
+      # Payments (donations phase; unused in the training slice).
+      VOP_STRIPE_SECRET_KEY: ${VOP_STRIPE_SECRET_KEY:-}
+      VOP_STRIPE_WEBHOOK_SECRET: ${VOP_STRIPE_WEBHOOK_SECRET:-}
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  worker:
+    build: ./backend
+    environment: *app_env
+    command: celery -A app.worker worker --loglevel=info
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  beat:
+    build: ./backend
+    environment: *app_env
+    command: celery -A app.worker beat --loglevel=info
+    depends_on:
+      redis: {condition: service_healthy}
+
+volumes:
+  vop_pg:

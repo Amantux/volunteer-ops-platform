@@ -1,0 +1,114 @@
+"""Governed MCP tool layer.
+
+Narrow, task-oriented tools over application services. Every tool declares a contract
+(authorization, risk, approval, reversibility, idempotency, audit event) and enforces
+authorization + audit *inside* the tool — never assuming the caller was already checked.
+The MCP server transport (stdio/HTTP) wraps `invoke_tool`; the tools never expose raw DB,
+shell, secrets, or cross-org access.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from sqlalchemy.orm import Session
+
+from app.core import audit
+from app.core.authz import PermissionDenied, Principal, require
+from app.modules.agents.models import ProposalStatus
+from app.modules.agents.risk import RiskLevel
+from app.modules.training.service import (
+    TrainingError,
+    propose_waitlist_promotion,
+    register_guest,
+)
+
+
+@dataclass(frozen=True)
+class ToolContract:
+    name: str
+    permission: str
+    risk: RiskLevel
+    approval_required: bool
+    reversible: bool
+    idempotent: bool
+    audit_action: str
+    data_classification: str  # e.g. "Sensitive-PII", "Internal"
+
+
+class ToolError(Exception):
+    pass
+
+
+_REGISTRY: dict[str, tuple[ToolContract, Callable[[Session, Principal, dict], dict]]] = {}
+
+
+def tool(contract: ToolContract):
+    def register(fn: Callable[[Session, Principal, dict], dict]):
+        _REGISTRY[contract.name] = (contract, fn)
+        return fn
+
+    return register
+
+
+def contracts() -> list[ToolContract]:
+    return [c for c, _ in _REGISTRY.values()]
+
+
+def invoke_tool(db: Session, principal: Principal, name: str, args: dict) -> dict:
+    """The single governed entry point. Enforces org scope, permission, and audit."""
+    entry = _REGISTRY.get(name)
+    if entry is None:
+        raise ToolError(f"unknown tool: {name}")
+    contract, fn = entry
+    try:
+        require(db, principal, contract.permission)
+    except PermissionDenied:
+        audit.emit(db, org_id=principal.org_id, action="mcp.denied", actor_type="agent",
+                   actor_id=name, target_type="tool", target_id=name)
+        db.commit()
+        raise ToolError("permission denied") from None
+    result = fn(db, principal, args)
+    audit.emit(db, org_id=principal.org_id, action=contract.audit_action, actor_type="agent",
+               actor_id=name, target_type="tool", target_id=name, meta={"args_keys": list(args)})
+    db.commit()
+    return result
+
+
+# --- Tools ------------------------------------------------------------------ #
+
+@tool(ToolContract(
+    name="register_training_guest", permission="training.register_guest",
+    risk=RiskLevel.r2_low_execute, approval_required=False, reversible=True, idempotent=True,
+    audit_action="mcp.register_training_guest", data_classification="Sensitive-PII",
+))
+def _register_training_guest(db: Session, principal: Principal, args: dict) -> dict:
+    try:
+        result = register_guest(
+            db, org_id=principal.org_id, session_id=int(args["session_id"]),
+            name=str(args["name"]), email=str(args["email"]), phone=str(args.get("phone", "")),
+            source="mcp",
+        )
+    except (TrainingError, KeyError) as exc:
+        raise ToolError(str(exc)) from exc
+    return {"registration_id": result.registration.id,
+            "status": result.registration.status.value, "waitlisted": result.waitlisted}
+
+
+@tool(ToolContract(
+    name="promote_waitlist_candidate", permission="training.approve_promotion",
+    risk=RiskLevel.r3_approval, approval_required=True, reversible=True, idempotent=False,
+    audit_action="mcp.promote_waitlist_candidate", data_classification="Internal",
+))
+def _promote_waitlist_candidate(db: Session, principal: Principal, args: dict) -> dict:
+    """Create a promotion proposal. It executes only if the org enabled the narrow
+    auto-promote policy; otherwise it awaits human approval (approval_required=True)."""
+    proposal = propose_waitlist_promotion(
+        db, org_id=principal.org_id, session_id=int(args["session_id"]),
+        requested_by_user_id=principal.user_id,
+    )
+    if proposal is None:
+        return {"promoted": False, "reason": "no eligible waitlisted candidate or no free seat"}
+    return {"proposal_id": proposal.id, "status": proposal.status.value,
+            "executed": proposal.status == ProposalStatus.auto_executed}

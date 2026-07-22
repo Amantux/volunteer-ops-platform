@@ -1,0 +1,45 @@
+"""Runtime settings, read from the environment (prefix VOP_)."""
+
+from __future__ import annotations
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="VOP_", env_file=".env", extra="ignore")
+
+    # Datastore. Postgres in compose/prod; tests override with SQLite for speed.
+    database_url: str = "postgresql+psycopg://vop:vop@localhost:5432/vop"
+    redis_url: str = "redis://localhost:6379/0"
+
+    # App secret for signing tokens (magic links, verification). CHANGE IN PROD.
+    app_secret: str = "dev-secret-change-me"
+
+    # First-run bootstrap org + admin.
+    bootstrap_org_name: str = "Community Volunteers"
+    bootstrap_org_slug: str = "community"
+    bootstrap_admin_email: str = "admin@example.org"
+
+    # Email provider: "console" (dev, logs), "inbox" (dev, DB table), or "smtp" (real:
+    # Postmark/SES/any SMTP). Selected by adapter factory.
+    email_provider: str = "inbox"
+    email_from: str = "Community Volunteers <no-reply@example.org>"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+
+    # Payments (Stripe) — scaffolded for the donations phase; unused in the training slice.
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+
+    # Public base URL for links in emails.
+    public_base_url: str = "http://localhost:3000"
+
+    # Token lifetimes (minutes).
+    verification_token_ttl_min: int = 60 * 24
+    activation_token_ttl_min: int = 60 * 24 * 7
+
+
+settings = Settings()
