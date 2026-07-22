@@ -1,13 +1,16 @@
 /** @type {import('next').NextConfig} */
+const API_TARGET = process.env.API_REWRITE_TARGET || 'http://localhost:8000';
+
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   async rewrites() {
-    // Dev proxy: browser requests to /api/* are forwarded to the FastAPI backend.
-    // In production the compose network / reverse proxy handles this instead.
+    // Browser requests to /api/* are proxied server-side to the FastAPI backend.
+    // Dev: localhost:8000. Compose: set API_REWRITE_TARGET=http://api:8000.
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
+        destination: `${API_TARGET}/api/:path*`,
       },
     ];
   },

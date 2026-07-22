@@ -1,6 +1,27 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { getSessions, type Session } from '@/lib/api';
+import { formatWhen, getSessions, type Session } from '@/lib/api';
+
+function PinIcon() {
+  return (
+    <svg
+      className="pin-icon"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </svg>
+  );
+}
 
 export const metadata: Metadata = {
   title: 'Trainings',
@@ -68,35 +89,50 @@ export default async function TrainingsPage() {
           <div className="empty-icon" aria-hidden="true">
             📅
           </div>
-          <h2>No trainings scheduled yet</h2>
+          <h2>No trainings scheduled right now</h2>
           <p>
-            We&rsquo;re planning our next sessions. Check back soon, or email us to
-            be notified when new trainings open.
+            No trainings scheduled right now — email us to hear when new sessions
+            open.
           </p>
           <a
             className="btn btn-primary"
             href="mailto:hello@riverside-volunteers.org"
           >
-            Notify me
+            Email us
           </a>
         </div>
       )}
 
       {!loadError && sessions && sessions.length > 0 && (
-        <ul className="card-list">
-          {sessions.map((s) => (
-            <li className="card" key={s.id}>
-              <Link className="card-link" href={`/trainings/${s.id}`}>
-                <h2>{s.course_title}</h2>
-                <p className="desc">{truncate(s.description)}</p>
-                <div className="card-meta">
-                  <span>📍 {s.location || 'Location to be announced'}</span>
-                  <Availability session={s} />
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="result-count">
+            {sessions.length} upcoming{' '}
+            {sessions.length === 1 ? 'training' : 'trainings'}
+          </p>
+          <ul className="card-list">
+            {sessions.map((s) => (
+              <li className="card" key={s.id}>
+                <Link className="card-link" href={`/trainings/${s.id}`}>
+                  <h2>{s.course_title}</h2>
+                  <p className="card-when">
+                    {formatWhen(s.starts_at, s.ends_at)}
+                  </p>
+                  <p className="desc">{truncate(s.description)}</p>
+                  <div className="card-meta">
+                    <span className="card-location">
+                      <PinIcon />
+                      {s.location || 'Location to be announced'}
+                    </span>
+                    <Availability session={s} />
+                  </div>
+                  <span className="card-cta" aria-hidden="true">
+                    View details →
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );

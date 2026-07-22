@@ -184,6 +184,11 @@ export default function RegistrationForm({ sessionId, full }: Props) {
             ? 'Join the waitlist'
             : 'Register'}
       </button>
+
+      <p className="form-trust">
+        No account needed. We&rsquo;ll only email you about this session and
+        won&rsquo;t share your details.
+      </p>
     </form>
   );
 }

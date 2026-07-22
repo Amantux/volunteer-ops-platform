@@ -7,8 +7,43 @@ export interface Session {
   course_title: string;
   description: string;
   location: string;
+  starts_at: string | null;
+  ends_at: string | null;
   capacity: number | null;
   seats_available: boolean;
+}
+
+// Human-readable date/time for a session, e.g. "Sat 9 Aug · 10:00–12:00".
+// Falls back to a friendly label when no date is scheduled.
+export function formatWhen(
+  starts_at: string | null,
+  ends_at: string | null,
+): string {
+  if (!starts_at) return 'Flexible / ongoing';
+  const start = new Date(starts_at);
+  if (Number.isNaN(start.getTime())) return 'Flexible / ongoing';
+
+  const date = start.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+  const time = start.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  if (ends_at) {
+    const end = new Date(ends_at);
+    if (!Number.isNaN(end.getTime())) {
+      const endTime = end.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      return `${date} · ${time}–${endTime}`;
+    }
+  }
+  return `${date} · ${time}`;
 }
 
 export interface RegisterInput {

@@ -46,7 +46,9 @@ test.describe('public registration flow', () => {
     const status = page.getByRole('status');
     await expect(status).toBeVisible();
     await expect(status).toContainText(/registered|waitlist/i);
-    await expect(page.getByText(/check your email/i)).toBeVisible();
+    // "check your email" appears in both the status line and a follow-up note; assert at
+    // least one is visible without tripping strict-mode.
+    await expect(page.getByText(/check your email/i).first()).toBeVisible();
   });
 
   test('keyboard-only: reach and submit the registration form', async ({

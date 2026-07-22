@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import RegistrationForm from '@/components/RegistrationForm';
-import { getSession } from '@/lib/api';
+import { formatWhen, getSession, type Session } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +33,31 @@ export default async function TrainingDetailPage({ params }: PageProps) {
   const id = parseId(params.id);
   if (id === null) notFound();
 
-  const session = await getSession(id);
+  // A true 404 (session not found) renders the not-found page. A connectivity /
+  // server failure is different — degrade gracefully instead of a bare 500.
+  let session: Session | null;
+  try {
+    session = await getSession(id);
+  } catch {
+    return (
+      <div className="container page">
+        <Link className="back-link" href="/trainings">
+          ← Back to all trainings
+        </Link>
+        <h1>This training couldn&rsquo;t be loaded</h1>
+        <div className="alert alert-danger" role="alert">
+          <strong>Something went wrong on our end.</strong>
+          <p>
+            Please try again in a moment. If it keeps happening, email{' '}
+            <a href="mailto:hello@riverside-volunteers.org">
+              hello@riverside-volunteers.org
+            </a>
+            .
+          </p>
+        </div>
+      </div>
+    );
+  }
   if (!session) notFound();
 
   return (
@@ -58,6 +82,8 @@ export default async function TrainingDetailPage({ params }: PageProps) {
           <p>{session.description}</p>
 
           <dl>
+            <dt>Date &amp; time</dt>
+            <dd>{formatWhen(session.starts_at, session.ends_at)}</dd>
             <dt>Location</dt>
             <dd>{session.location || 'To be announced'}</dd>
             <dt>Capacity</dt>
@@ -73,6 +99,24 @@ export default async function TrainingDetailPage({ params }: PageProps) {
                 : 'This session is full — you can join the waitlist below.'}
             </dd>
           </dl>
+
+          <div className="detail-info">
+            <section className="detail-info-block">
+              <h2>Who can attend</h2>
+              <p>Open to everyone — no experience needed.</p>
+            </section>
+            <section className="detail-info-block">
+              <h2>What to bring</h2>
+              <p>Just yourself — we provide everything else.</p>
+            </section>
+            <section className="detail-info-block">
+              <h2>Questions?</h2>
+              <p>
+                Email{' '}
+                <a href="mailto:hello@example.org">hello@example.org</a>
+              </p>
+            </section>
+          </div>
         </div>
 
         <div className="panel">

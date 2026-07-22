@@ -4,9 +4,9 @@
 --------------------------------------------------------------------------- */
 
 :root {
-  /* Accent */
-  --accent: #0d9488;
-  --accent-hover: #0f766e;
+  /* Accent — teal-700 so white text on it meets WCAG AA (>=4.5:1). */
+  --accent: #0f766e;
+  --accent-hover: #115e59;
   --accent-contrast: #ffffff;
   /* text on tinted accent surfaces — darkened for >=4.5:1 contrast */
   --accent-ink: #115e59;
@@ -127,8 +127,10 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-3) var(--space-4);
   min-height: 64px;
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
   flex-wrap: wrap;
 }
 .brand {
@@ -152,7 +154,7 @@ a {
 }
 .site-nav {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 .site-nav a {
   color: var(--text);
@@ -270,19 +272,31 @@ main {
 }
 
 /* Cards / list ---------------------------------------------------------- */
+.result-count {
+  margin: var(--space-4) 0 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
 .card-list {
   list-style: none;
   padding: 0;
-  margin: var(--space-6) 0 0;
+  margin: var(--space-4) 0 0;
   display: grid;
   gap: var(--space-4);
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  max-width: 720px;
 }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
 }
 .card-link {
   display: block;
@@ -292,8 +306,27 @@ main {
   border-radius: var(--radius);
 }
 .card-link:hover {
-  border-color: var(--accent);
   background: var(--surface-raised);
+}
+.card-when {
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.card-location {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.pin-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+.card-cta {
+  display: block;
+  margin-top: var(--space-4);
+  color: var(--accent-ink);
+  font-weight: 600;
 }
 .card h2,
 .card h3 {
@@ -365,6 +398,19 @@ main {
   border-radius: var(--radius);
   padding: var(--space-6);
   box-shadow: var(--shadow-card);
+}
+.detail-info {
+  margin-top: var(--space-8);
+  display: grid;
+  gap: var(--space-6);
+}
+.detail-info-block h2 {
+  font-size: 1.1rem;
+  margin-bottom: var(--space-2);
+}
+.detail-info-block p {
+  color: var(--text-muted);
+  margin: 0;
 }
 
 /* Forms ----------------------------------------------------------------- */
@@ -442,6 +488,11 @@ main {
   font-size: 0.95rem;
   margin-top: var(--space-3);
 }
+.form-trust {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: var(--space-3) 0 0;
+}
 
 /* Empty / status states ------------------------------------------------- */
 .empty {
@@ -491,11 +542,6 @@ main {
 }
 
 /* Responsive ------------------------------------------------------------ */
-@media (min-width: 640px) {
-  .card-list {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
 @media (min-width: 900px) {
   .feature-grid {
     grid-template-columns: repeat(3, 1fr);

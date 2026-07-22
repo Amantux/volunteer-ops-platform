@@ -62,5 +62,20 @@ services:
     depends_on:
       redis: {condition: service_healthy}
 
+  web:
+    build:
+      context: ./web
+      # Baked at build time — Next compiles the /api proxy destination into the app.
+      args:
+        API_REWRITE_TARGET: http://api:8000
+    environment:
+      # Read at runtime for server-side (SSR) fetches.
+      API_INTERNAL_BASE: http://api:8000/api
+      NEXT_PUBLIC_API_BASE: /api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
 volumes:
   vop_pg:

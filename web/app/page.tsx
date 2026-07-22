@@ -59,8 +59,8 @@ export default function HomePage() {
             Explore our current trainings and register for the ones that speak to
             you.
           </p>
-          <Link className="btn btn-primary" href="/trainings">
-            See upcoming trainings
+          <Link className="btn btn-secondary" href="/trainings">
+            Browse trainings
           </Link>
         </section>
       </div>

@@ -136,6 +136,12 @@ def _seed_demo_training(db: Session, org_id: int) -> None:
                     is_public=True, grants_qualification_type_id=qtype.id)
     db.add(course)
     db.flush()
+    from datetime import timedelta
+
+    from app.core.db import utcnow
+
+    start = (utcnow() + timedelta(days=9)).replace(hour=10, minute=0, second=0, microsecond=0)
     db.add(TrainingSession(org_id=org_id, course_id=course.id, capacity=20,
-                           location="Community Center, Room A"))
+                           location="Community Center, Room A",
+                           starts_at=start, ends_at=start + timedelta(hours=2)))
     db.flush()

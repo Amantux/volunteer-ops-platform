@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
@@ -22,6 +24,8 @@ class SessionOut(BaseModel):
     course_title: str
     description: str
     location: str
+    starts_at: datetime | None
+    ends_at: datetime | None
     capacity: int | None
     seats_available: bool
 
@@ -47,7 +51,8 @@ class VerifyIn(BaseModel):
 def _to_out(s: TrainingSession) -> SessionOut:
     return SessionOut(
         id=s.id, course_title=s.course.title, description=s.course.description,
-        location=s.location, capacity=s.capacity, seats_available=s.seats_available,
+        location=s.location, starts_at=s.starts_at, ends_at=s.ends_at,
+        capacity=s.capacity, seats_available=s.seats_available,
     )
 
 
