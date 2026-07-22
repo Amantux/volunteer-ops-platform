@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import audit
+from app.core.authz import PermissionDenied, Principal, has_permission
 from app.core.config import settings
 from app.core.db import utcnow
 from app.core.security import generate_token, hash_token
@@ -97,11 +98,11 @@ def _get_or_create_person(db: Session, *, org_id: int, name: str, email: str, ph
 
 
 def _issue_token(db: Session, *, org_id: int, person_id: int, purpose: TokenPurpose,
-                 ttl_min: int) -> str:
+                 ttl_min: int, registration_id: int | None = None) -> str:
     token = generate_token()
     db.add(VerificationToken(
-        org_id=org_id, person_id=person_id, purpose=purpose, token_hash=hash_token(token),
-        expires_at=utcnow() + timedelta(minutes=ttl_min),
+        org_id=org_id, person_id=person_id, registration_id=registration_id, purpose=purpose,
+        token_hash=hash_token(token), expires_at=utcnow() + timedelta(minutes=ttl_min),
     ))
     db.flush()
     return token
@@ -149,7 +150,7 @@ def register_guest(db: Session, *, org_id: int, session_id: int, name: str, emai
 
     token = _issue_token(
         db, org_id=org_id, person_id=person.id, purpose=TokenPurpose.email_verification,
-        ttl_min=settings.verification_token_ttl_min,
+        ttl_min=settings.verification_token_ttl_min, registration_id=registration.id,
     )
     queue_email(
         db, org_id=org_id, idempotency_key=f"verify:reg:{registration.id}",
@@ -164,8 +165,8 @@ def register_guest(db: Session, *, org_id: int, session_id: int, name: str, emai
 
 
 def verify_email(db: Session, *, token: str) -> TrainingRegistration | None:
-    """Consume a single-use verification token; confirm the person's most recent
-    registration and enqueue the confirmation email. Returns the registration."""
+    """Consume a single-use verification token, verify the person's email, and confirm the
+    *specific* registration the token was issued for (not merely the newest)."""
     row = db.scalar(select(VerificationToken).where(
         VerificationToken.token_hash == hash_token(token),
         VerificationToken.purpose == TokenPurpose.email_verification,
@@ -176,11 +177,7 @@ def verify_email(db: Session, *, token: str) -> TrainingRegistration | None:
     person = db.get(Person, row.person_id)
     person.email_verified = True
 
-    registration = db.scalar(
-        select(TrainingRegistration)
-        .where(TrainingRegistration.person_id == person.id)
-        .order_by(TrainingRegistration.id.desc())
-    )
+    registration = db.get(TrainingRegistration, row.registration_id) if row.registration_id else None
     if registration is None:
         db.flush()
         return None
@@ -268,10 +265,14 @@ def approve_promotion(db: Session, *, org_id: int, proposal_id: int, decided_by_
     if proposal.status != ProposalStatus.proposed:
         raise TrainingError("proposal is not pending")
     candidate = db.get(TrainingRegistration, proposal.inputs["registration_id"])
-    if candidate is None or candidate.status != RegistrationStatus.waitlisted:
+    session = db.get(TrainingSession, candidate.session_id) if candidate else None
+    # Re-check eligibility AND seat availability at approval time: the freed seat may have
+    # been taken by a new registration between propose and approve.
+    if (candidate is None or candidate.status != RegistrationStatus.waitlisted
+            or session is None or not _seats_available(db, session)):
         proposal.status = ProposalStatus.rejected
         db.flush()
-        raise TrainingError("waitlisted candidate no longer eligible")
+        raise TrainingError("no seat available or candidate no longer eligible")
     proposal.status = ProposalStatus.approved
     proposal.decided_by_user_id = decided_by_user_id
     proposal.decided_at = utcnow()
@@ -283,6 +284,10 @@ def approve_promotion(db: Session, *, org_id: int, proposal_id: int, decided_by_
 
 def _execute_promotion(db: Session, proposal: AgentProposal, candidate: TrainingRegistration,
                        *, actor_type: str, actor_id) -> None:
+    # Defensive final seat check (auto-promote path calls this directly).
+    session = db.get(TrainingSession, candidate.session_id)
+    if not _seats_available(db, session):
+        raise TrainingError("no seat available")
     candidate.status = RegistrationStatus.confirmed
     candidate.waitlist_position = None
     person = db.get(Person, candidate.person_id)
@@ -299,28 +304,41 @@ def _execute_promotion(db: Session, proposal: AgentProposal, candidate: Training
 
 # --- Attendance / completion ------------------------------------------------ #
 
-def check_in(db: Session, *, org_id: int, registration_id: int, actor_id) -> TrainingRegistration:
+def _load_reg_for_actor(db: Session, *, org_id: int, registration_id: int,
+                        principal: Principal) -> TrainingRegistration:
+    """Load a registration and enforce object-level ownership: the actor must run the
+    session (trainer_user_id) OR hold the org-wide override permission."""
     reg = db.get(TrainingRegistration, registration_id)
     if reg is None or reg.org_id != org_id:
         raise TrainingError("registration not found")
+    session = db.get(TrainingSession, reg.session_id)
+    owns = session.trainer_user_id in (None, principal.user_id)
+    if not owns and not has_permission(db, principal, "training.manage_any_session"):
+        raise PermissionDenied("training.manage_any_session")
+    return reg
+
+
+def check_in(db: Session, *, org_id: int, registration_id: int,
+             principal: Principal) -> TrainingRegistration:
+    reg = _load_reg_for_actor(db, org_id=org_id, registration_id=registration_id,
+                              principal=principal)
     reg.status = RegistrationStatus.attended
     reg.checked_in_at = utcnow()
     db.flush()
-    audit.emit(db, org_id=org_id, action="training.checkin", actor_id=actor_id,
+    audit.emit(db, org_id=org_id, action="training.checkin", actor_id=principal.user_id,
                target_type="registration", target_id=reg.id)
     return reg
 
 
-def record_completion(db: Session, *, org_id: int, registration_id: int, actor_id):
+def record_completion(db: Session, *, org_id: int, registration_id: int, principal: Principal):
     from app.modules.people.service import grant_course_qualification
 
-    reg = db.get(TrainingRegistration, registration_id)
-    if reg is None or reg.org_id != org_id:
-        raise TrainingError("registration not found")
+    reg = _load_reg_for_actor(db, org_id=org_id, registration_id=registration_id,
+                              principal=principal)
     reg.status = RegistrationStatus.completed
     reg.completed_at = utcnow()
     db.flush()
-    audit.emit(db, org_id=org_id, action="training.completion", actor_id=actor_id,
+    audit.emit(db, org_id=org_id, action="training.completion", actor_id=principal.user_id,
                target_type="registration", target_id=reg.id)
     # Grant the course's qualification if the person is already an active volunteer;
     # otherwise it is granted when they activate their account.

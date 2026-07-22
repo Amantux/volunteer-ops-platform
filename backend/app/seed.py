@@ -21,9 +21,10 @@ from app.modules.training.models import Course, TrainingSession
 # role_key -> permissions granted
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     "org_admin": [
-        "training.manage_course", "training.manage_session", "training.record_attendance",
-        "training.record_completion", "training.view_roster", "training.approve_promotion",
-        "training.register_guest", "report.view_training", "audit.view",
+        "training.manage_course", "training.manage_session", "training.manage_any_session",
+        "training.record_attendance", "training.record_completion", "training.view_roster",
+        "training.approve_promotion", "training.register_guest", "report.view_training",
+        "audit.view",
     ],
     "trainer": [
         "training.manage_session", "training.record_attendance", "training.record_completion",

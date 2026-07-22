@@ -116,12 +116,17 @@ def queue_email(
 
 @handler("email.send")
 def handle_email_send(db: Session, event: OutboxEvent) -> None:
+    # Idempotent per outbox event: if we already produced a message for this event
+    # (e.g. a retry after a partial failure), don't send again.
+    if db.scalar(select(EmailMessage).where(EmailMessage.outbox_event_id == event.id)):
+        return
     payload = event.payload
     subject, body = render_template(
         db, org_id=event.org_id, key=payload["template_key"], context=payload.get("context", {})
     )
     message = EmailMessage(
         org_id=event.org_id,
+        outbox_event_id=event.id,
         to_email=payload["to_email"],
         subject=subject,
         body_text=body,

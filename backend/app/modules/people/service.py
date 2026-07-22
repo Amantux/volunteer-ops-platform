@@ -70,9 +70,10 @@ def grant_course_qualification(db: Session, *, org_id: int, person_id: int, cour
     """Grant the course's qualification to the person's volunteer profile, if any and if not
     already held. No-op when the person isn't a volunteer yet (granted at activation)."""
     course = db.get(Course, course_id)
-    if course is None or course.grants_qualification_type_id is None:
+    if course is None or course.org_id != org_id or course.grants_qualification_type_id is None:
         return
-    profile = db.scalar(select(VolunteerProfile).where(VolunteerProfile.person_id == person_id))
+    profile = db.scalar(select(VolunteerProfile).where(
+        VolunteerProfile.org_id == org_id, VolunteerProfile.person_id == person_id))
     if profile is None:
         return
     already = db.scalar(select(VolunteerQualification).where(

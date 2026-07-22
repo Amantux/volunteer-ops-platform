@@ -14,9 +14,21 @@ from app.core.config import settings
 from app.core.db import SessionLocal, init_db
 from app.seed import seed_bootstrap
 
+_INSECURE_SECRETS = {"dev-secret-change-me", "change-me-in-prod"}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail fast if a real email provider is configured with an insecure app secret:
+    # session tokens and verification-token hashes derive from it.
+    if settings.app_secret in _INSECURE_SECRETS:
+        if settings.email_provider == "smtp":
+            raise RuntimeError(
+                "VOP_APP_SECRET is still the default — refusing to start with a real email "
+                "provider. Set a strong secret."
+            )
+        print("WARNING: VOP_APP_SECRET is the default dev value. Set VOP_APP_SECRET before "
+              "deploying.")
     init_db()
     with SessionLocal() as db:
         seed_bootstrap(db)

@@ -106,6 +106,9 @@ class VerificationToken(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     org_id: Mapped[int] = mapped_column(ForeignKey("organization.id"), nullable=False, index=True)
     person_id: Mapped[int] = mapped_column(ForeignKey("person.id"), nullable=False)
+    # For email-verification tokens: the specific registration being verified (so a person
+    # registered for several sessions verifies the right one).
+    registration_id: Mapped[int | None] = mapped_column(ForeignKey("training_registration.id"))
     purpose: Mapped[TokenPurpose] = mapped_column(nullable=False)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

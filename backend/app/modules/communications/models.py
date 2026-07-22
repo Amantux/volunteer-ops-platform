@@ -28,6 +28,8 @@ class EmailMessage(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     org_id: Mapped[int] = mapped_column(ForeignKey("organization.id"), nullable=False, index=True)
+    # The outbox event that produced this message — makes send idempotent per event.
+    outbox_event_id: Mapped[int | None] = mapped_column(Integer, unique=True, index=True)
     to_email: Mapped[str] = mapped_column(String(320), nullable=False)
     subject: Mapped[str] = mapped_column(String(300), nullable=False)
     body_text: Mapped[str] = mapped_column(Text, nullable=False)

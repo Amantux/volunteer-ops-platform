@@ -83,13 +83,18 @@ def relay_pending(db: Session, *, limit: int = 100) -> int:
     for event in events:
         fn = _HANDLERS.get(event.event_type)
         event.attempts += 1
+        # Run the handler inside a savepoint so a failure rolls back its partial writes
+        # (e.g. a half-created EmailMessage) without abandoning the attempt/error bookkeeping.
+        savepoint = db.begin_nested()
         try:
             if fn is not None:
                 fn(db, event)
+            savepoint.commit()
             event.processed_at = utcnow()
             event.last_error = ""
             processed += 1
         except Exception as exc:  # noqa: BLE001 - record + leave for retry
+            savepoint.rollback()
             event.last_error = str(exc)[:500]
         db.flush()
     db.commit()

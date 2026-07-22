@@ -62,6 +62,14 @@ def invoke_tool(db: Session, principal: Principal, name: str, args: dict) -> dic
     if entry is None:
         raise ToolError(f"unknown tool: {name}")
     contract, fn = entry
+    # Governance gate: prohibited-risk tools never execute through MCP, regardless of
+    # permission. Approval-required tools must themselves return a proposal rather than
+    # perform the side effect (enforced by the underlying service, e.g. promotion).
+    if contract.risk == RiskLevel.r4_prohibited:
+        audit.emit(db, org_id=principal.org_id, action="mcp.prohibited", actor_type="agent",
+                   actor_id=name, target_type="tool", target_id=name)
+        db.commit()
+        raise ToolError("prohibited action")
     try:
         require(db, principal, contract.permission)
     except PermissionDenied:
