@@ -24,11 +24,19 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "training.manage_course", "training.manage_session", "training.manage_any_session",
         "training.record_attendance", "training.record_completion", "training.view_roster",
         "training.approve_promotion", "training.register_guest", "report.view_training",
-        "audit.view",
+        "shift.manage", "shift.view_roster", "shift.record_attendance", "hours.approve",
+        "report.view_staffing", "shift.view_eligible", "shift.signup", "audit.view",
     ],
     "trainer": [
         "training.manage_session", "training.record_attendance", "training.record_completion",
         "training.view_roster",
+    ],
+    "coordinator": [
+        "shift.manage", "shift.view_roster", "shift.record_attendance", "hours.approve",
+        "report.view_staffing",
+    ],
+    "volunteer": [
+        "shift.view_eligible", "shift.signup",
     ],
 }
 

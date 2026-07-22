@@ -66,6 +66,15 @@ def activate_volunteer(db: Session, *, org_id: int, person_id: int,
     return user
 
 
+def profile_for_user(db: Session, *, org_id: int, user_id: int) -> VolunteerProfile | None:
+    """Resolve the volunteer profile for an authenticated user (user → person → profile)."""
+    user = db.get(User, user_id)
+    if user is None or user.org_id != org_id:
+        return None
+    return db.scalar(select(VolunteerProfile).where(
+        VolunteerProfile.org_id == org_id, VolunteerProfile.person_id == user.person_id))
+
+
 def grant_course_qualification(db: Session, *, org_id: int, person_id: int, course_id: int) -> None:
     """Grant the course's qualification to the person's volunteer profile, if any and if not
     already held. No-op when the person isn't a volunteer yet (granted at activation)."""

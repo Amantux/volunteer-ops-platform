@@ -25,6 +25,13 @@ from app.modules.people.models import (  # noqa: F401
     VolunteerProfile,
     VolunteerQualification,
 )
+from app.modules.scheduling.models import (  # noqa: F401
+    Event,
+    Shift,
+    ShiftRole,
+    ShiftSignup,
+    VolunteerHourEntry,
+)
 from app.modules.training.models import (  # noqa: F401
     Course,
     TrainingRegistration,

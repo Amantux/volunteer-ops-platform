@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: e7d466a44eef
+Revision ID: 73a8b2b8d341
 Revises: 
-Create Date: 2026-07-22 06:01:50.299095
+Create Date: 2026-07-22 06:19:44.401778
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = 'e7d466a44eef'
+revision: str = '73a8b2b8d341'
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -90,6 +90,19 @@ def upgrade() -> None:
     sa.UniqueConstraint('org_id', 'key', name='uq_email_template_key')
     )
     op.create_index(op.f('ix_email_template_org_id'), 'email_template', ['org_id'], unique=False)
+    op.create_table('event',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('org_id', sa.Integer(), nullable=False),
+    sa.Column('title', sa.String(length=200), nullable=False),
+    sa.Column('description', sa.Text(), nullable=False),
+    sa.Column('kind', sa.String(length=30), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['org_id'], ['organization.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_event_org_id'), 'event', ['org_id'], unique=False)
     op.create_table('organization_setting',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('org_id', sa.Integer(), nullable=False),
@@ -208,6 +221,22 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('role_id', 'permission', name='uq_role_permission')
     )
+    op.create_table('shift',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('org_id', sa.Integer(), nullable=False),
+    sa.Column('event_id', sa.Integer(), nullable=False),
+    sa.Column('starts_at', sa.DateTime(), nullable=False),
+    sa.Column('ends_at', sa.DateTime(), nullable=False),
+    sa.Column('timezone', sa.String(length=64), nullable=False),
+    sa.Column('location', sa.String(length=200), nullable=False),
+    sa.Column('is_open', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['event_id'], ['event.id'], ),
+    sa.ForeignKeyConstraint(['org_id'], ['organization.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_shift_org_id'), 'shift', ['org_id'], unique=False)
     op.create_table('volunteer_profile',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('org_id', sa.Integer(), nullable=False),
@@ -244,6 +273,21 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_agent_proposal_org_id'), 'agent_proposal', ['org_id'], unique=False)
+    op.create_table('shift_role',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('org_id', sa.Integer(), nullable=False),
+    sa.Column('shift_id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=120), nullable=False),
+    sa.Column('capacity', sa.Integer(), nullable=False),
+    sa.Column('required_qualification_type_id', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['org_id'], ['organization.id'], ),
+    sa.ForeignKeyConstraint(['required_qualification_type_id'], ['qualification_type.id'], ),
+    sa.ForeignKeyConstraint(['shift_id'], ['shift.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_shift_role_org_id'), 'shift_role', ['org_id'], unique=False)
     op.create_table('training_session',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('org_id', sa.Integer(), nullable=False),
@@ -294,12 +338,29 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_volunteer_qualification_org_id'), 'volunteer_qualification', ['org_id'], unique=False)
+    op.create_table('shift_signup',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('org_id', sa.Integer(), nullable=False),
+    sa.Column('shift_role_id', sa.Integer(), nullable=False),
+    sa.Column('volunteer_profile_id', sa.Integer(), nullable=False),
+    sa.Column('status', sa.Enum('confirmed', 'waitlisted', 'cancelled', 'attended', 'no_show', name='signupstatus'), nullable=False),
+    sa.Column('waitlist_position', sa.Integer(), nullable=True),
+    sa.Column('checked_in_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['org_id'], ['organization.id'], ),
+    sa.ForeignKeyConstraint(['shift_role_id'], ['shift_role.id'], ),
+    sa.ForeignKeyConstraint(['volunteer_profile_id'], ['volunteer_profile.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('shift_role_id', 'volunteer_profile_id', name='uq_shift_signup_once')
+    )
+    op.create_index(op.f('ix_shift_signup_org_id'), 'shift_signup', ['org_id'], unique=False)
     op.create_table('training_registration',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('org_id', sa.Integer(), nullable=False),
     sa.Column('session_id', sa.Integer(), nullable=False),
     sa.Column('person_id', sa.Integer(), nullable=False),
-    sa.Column('status', sa.Enum('registered', 'confirmed', 'waitlisted', 'cancelled', 'attended', 'completed', 'no_show', name='registrationstatus'), nullable=False),
+    sa.Column('status', sa.Enum('registered', 'confirmed', 'waitlisted', 'cancelled', 'expired', 'attended', 'completed', 'no_show', name='registrationstatus'), nullable=False),
     sa.Column('source', sa.String(length=40), nullable=False),
     sa.Column('waitlist_position', sa.Integer(), nullable=True),
     sa.Column('checked_in_at', sa.DateTime(), nullable=True),
@@ -331,26 +392,52 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_verification_token_org_id'), 'verification_token', ['org_id'], unique=False)
     op.create_index(op.f('ix_verification_token_token_hash'), 'verification_token', ['token_hash'], unique=True)
+    op.create_table('volunteer_hour_entry',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('org_id', sa.Integer(), nullable=False),
+    sa.Column('volunteer_profile_id', sa.Integer(), nullable=False),
+    sa.Column('shift_signup_id', sa.Integer(), nullable=True),
+    sa.Column('source', sa.String(length=30), nullable=False),
+    sa.Column('hours', sa.Float(), nullable=False),
+    sa.Column('approved', sa.Boolean(), nullable=False),
+    sa.Column('approved_by_user_id', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['approved_by_user_id'], ['app_user.id'], ),
+    sa.ForeignKeyConstraint(['org_id'], ['organization.id'], ),
+    sa.ForeignKeyConstraint(['shift_signup_id'], ['shift_signup.id'], ),
+    sa.ForeignKeyConstraint(['volunteer_profile_id'], ['volunteer_profile.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_volunteer_hour_entry_org_id'), 'volunteer_hour_entry', ['org_id'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_volunteer_hour_entry_org_id'), table_name='volunteer_hour_entry')
+    op.drop_table('volunteer_hour_entry')
     op.drop_index(op.f('ix_verification_token_token_hash'), table_name='verification_token')
     op.drop_index(op.f('ix_verification_token_org_id'), table_name='verification_token')
     op.drop_table('verification_token')
     op.drop_index(op.f('ix_training_registration_org_id'), table_name='training_registration')
     op.drop_table('training_registration')
+    op.drop_index(op.f('ix_shift_signup_org_id'), table_name='shift_signup')
+    op.drop_table('shift_signup')
     op.drop_index(op.f('ix_volunteer_qualification_org_id'), table_name='volunteer_qualification')
     op.drop_table('volunteer_qualification')
     op.drop_index(op.f('ix_user_role_assignment_org_id'), table_name='user_role_assignment')
     op.drop_table('user_role_assignment')
     op.drop_index(op.f('ix_training_session_org_id'), table_name='training_session')
     op.drop_table('training_session')
+    op.drop_index(op.f('ix_shift_role_org_id'), table_name='shift_role')
+    op.drop_table('shift_role')
     op.drop_index(op.f('ix_agent_proposal_org_id'), table_name='agent_proposal')
     op.drop_table('agent_proposal')
     op.drop_index(op.f('ix_volunteer_profile_org_id'), table_name='volunteer_profile')
     op.drop_table('volunteer_profile')
+    op.drop_index(op.f('ix_shift_org_id'), table_name='shift')
+    op.drop_table('shift')
     op.drop_table('role_permission')
     op.drop_index(op.f('ix_email_delivery_event_org_id'), table_name='email_delivery_event')
     op.drop_table('email_delivery_event')
@@ -369,6 +456,8 @@ def downgrade() -> None:
     op.drop_table('outbox_event')
     op.drop_index(op.f('ix_organization_setting_org_id'), table_name='organization_setting')
     op.drop_table('organization_setting')
+    op.drop_index(op.f('ix_event_org_id'), table_name='event')
+    op.drop_table('event')
     op.drop_index(op.f('ix_email_template_org_id'), table_name='email_template')
     op.drop_table('email_template')
     op.drop_index(op.f('ix_email_message_outbox_event_id'), table_name='email_message')
