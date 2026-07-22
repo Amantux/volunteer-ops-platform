@@ -347,6 +347,37 @@ def record_completion(db: Session, *, org_id: int, registration_id: int, princip
     return reg
 
 
+# --- Maintenance: reclaim stale unverified holds ---------------------------- #
+
+def expire_unconfirmed_holds(db: Session, *, ttl_min: int | None = None) -> int:
+    """Reclaim seats held by never-verified 'registered' rows older than the TTL.
+
+    Expiring frees the seat (status → expired), then proposes waitlist promotion for each
+    affected session (respecting the org's approval/auto-promote policy). Idempotent and
+    safe to run repeatedly on a schedule. Returns the number expired.
+    """
+    cutoff = utcnow() - timedelta(minutes=ttl_min or settings.unconfirmed_hold_ttl_min)
+    stale = db.scalars(
+        select(TrainingRegistration).where(
+            TrainingRegistration.status == RegistrationStatus.registered,
+            TrainingRegistration.created_at < cutoff,
+        )
+    ).all()
+    affected_sessions: set[int] = set()
+    for reg in stale:
+        reg.status = RegistrationStatus.expired
+        affected_sessions.add(reg.session_id)
+        audit.emit(db, org_id=reg.org_id, action="training.hold_expired", actor_type="service",
+                   actor_id="reaper", target_type="registration", target_id=reg.id)
+    db.flush()
+    for session_id in affected_sessions:
+        session = db.get(TrainingSession, session_id)
+        propose_waitlist_promotion(db, org_id=session.org_id, session_id=session_id,
+                                   requested_by_user_id=None)
+    db.commit()
+    return len(stale)
+
+
 # --- Reporting -------------------------------------------------------------- #
 
 def training_funnel(db: Session, *, org_id: int, session_id: int | None = None) -> dict[str, int]:

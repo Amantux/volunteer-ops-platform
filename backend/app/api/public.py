@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core import ratelimit
+from app.core import botcheck, ratelimit
 from app.modules.org.models import Organization
 from app.modules.training.models import RegistrationStatus, TrainingSession
 from app.modules.training.service import TrainingError, register_guest, verify_email
@@ -30,6 +30,8 @@ class RegisterIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     email: EmailStr
     phone: str = ""
+    # Cloudflare Turnstile token when bot-check is enabled (ignored when disabled).
+    bot_token: str | None = None
 
 
 class RegisterOut(BaseModel):
@@ -73,8 +75,10 @@ def get_session(session_id: int, db: Session = Depends(get_db),
 def register(session_id: int, payload: RegisterIn, request: Request,
              db: Session = Depends(get_db), org: Organization = Depends(get_public_org)):
     client = request.client.host if request.client else "unknown"
-    if not ratelimit.check(f"register:{client}", limit=5, window_seconds=60):
+    if not ratelimit.allow(f"register:{client}", limit=5, window_seconds=60):
         raise HTTPException(status_code=429, detail="Too many attempts. Please try again shortly.")
+    if not botcheck.verify(payload.bot_token, remote_ip=client):
+        raise HTTPException(status_code=400, detail="Bot check failed. Please try again.")
     try:
         result = register_guest(db, org_id=org.id, session_id=session_id,
                                 name=payload.name, email=str(payload.email), phone=payload.phone)

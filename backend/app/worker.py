@@ -15,6 +15,7 @@ from app.core.db import SessionLocal
 celery_app = Celery("vop", broker=settings.redis_url, backend=settings.redis_url)
 celery_app.conf.beat_schedule = {
     "relay-outbox": {"task": "app.worker.relay_outbox", "schedule": 5.0},
+    "expire-holds": {"task": "app.worker.expire_holds", "schedule": 300.0},
 }
 celery_app.conf.timezone = "UTC"
 
@@ -25,3 +26,12 @@ def relay_outbox() -> int:
 
     with SessionLocal() as db:
         return relay_pending(db)
+
+
+@celery_app.task(name="app.worker.expire_holds")
+def expire_holds() -> int:
+    """Reclaim seats held by never-verified registrations past their TTL."""
+    from app.modules.training.service import expire_unconfirmed_holds
+
+    with SessionLocal() as db:
+        return expire_unconfirmed_holds(db)

@@ -15,7 +15,8 @@ class RegistrationStatus(str, enum.Enum):
     registered = "registered"      # created, email may be unverified
     confirmed = "confirmed"        # verified + holds a seat
     waitlisted = "waitlisted"
-    cancelled = "cancelled"
+    cancelled = "cancelled"        # cancelled by the person/coordinator
+    expired = "expired"            # unverified hold reclaimed by the system
     attended = "attended"
     completed = "completed"
     no_show = "no_show"

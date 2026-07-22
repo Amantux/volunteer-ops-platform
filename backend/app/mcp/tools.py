@@ -12,16 +12,19 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import audit
 from app.core.authz import PermissionDenied, Principal, require
 from app.modules.agents.models import ProposalStatus
 from app.modules.agents.risk import RiskLevel
+from app.modules.training.models import TrainingSession
 from app.modules.training.service import (
     TrainingError,
     propose_waitlist_promotion,
     register_guest,
+    training_funnel,
 )
 
 
@@ -120,3 +123,29 @@ def _promote_waitlist_candidate(db: Session, principal: Principal, args: dict) -
         return {"promoted": False, "reason": "no eligible waitlisted candidate or no free seat"}
     return {"proposal_id": proposal.id, "status": proposal.status.value,
             "executed": proposal.status == ProposalStatus.auto_executed}
+
+
+@tool(ToolContract(
+    name="get_training_funnel_metrics", permission="report.view_training",
+    risk=RiskLevel.r0_read, approval_required=False, reversible=True, idempotent=True,
+    audit_action="mcp.get_training_funnel_metrics", data_classification="Internal",
+))
+def _get_training_funnel_metrics(db: Session, principal: Principal, args: dict) -> dict:
+    session_id = int(args["session_id"]) if args.get("session_id") else None
+    return {"funnel": training_funnel(db, org_id=principal.org_id, session_id=session_id)}
+
+
+@tool(ToolContract(
+    name="list_training_sessions", permission="report.view_training",
+    risk=RiskLevel.r0_read, approval_required=False, reversible=True, idempotent=True,
+    audit_action="mcp.list_training_sessions", data_classification="Internal",
+))
+def _list_training_sessions(db: Session, principal: Principal, args: dict) -> dict:
+    rows = db.scalars(
+        select(TrainingSession).where(TrainingSession.org_id == principal.org_id)
+    ).all()
+    return {"sessions": [
+        {"id": s.id, "course": s.course.title, "capacity": s.capacity,
+         "seats_available": s.seats_available, "is_open": s.is_open}
+        for s in rows
+    ]}

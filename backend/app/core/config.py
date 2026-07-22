@@ -41,5 +41,14 @@ class Settings(BaseSettings):
     verification_token_ttl_min: int = 60 * 24
     activation_token_ttl_min: int = 60 * 24 * 7
 
+    # Unverified "registered" holds expire (freeing the seat) after this long.
+    unconfirmed_hold_ttl_min: int = 60 * 24
+
+    # Rate limiting: "memory" (single node/dev/tests) | "redis" (multi-node/prod).
+    ratelimit_backend: str = "memory"
+    # Public-form bot control: "none" (dev) | "turnstile" (Cloudflare Turnstile).
+    botcheck_provider: str = "none"
+    turnstile_secret: str = ""
+
 
 settings = Settings()
