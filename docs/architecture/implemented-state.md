@@ -132,9 +132,11 @@ Ordered by structural leverage. None of these have code today.
    cross-tenant isolation is an *infrastructure* boundary rather than a shared-DB concern.
    `org_id` scoping is retained as a cheap internal invariant. What remains: light org-scoping
    sanity tests + a "new-instance" onboarding checklist. → `multi-tenancy.md` (this batch).
-2. **Forms & workflow builder.** No shared form/workflow engine; onboarding is bespoke code in
-   `people/service.py`. This is the substrate the brief wants reused by incidents, maintenance,
-   reimbursements, feedback. → `forms-workflow-engine.md` (this batch).
+2. ~~**Forms & workflow builder.**~~ ✅ **BUILT** — `app/modules/forms` + `app/modules/workflows`:
+   JSON-defined immutable-versioned forms + a declarative state-machine engine, with the incident
+   report shipped as config, a public form renderer, and a reviewer inbox. See
+   `forms-workflow-engine.md`. Remaining consumers (maintenance, reimbursements, onboarding re-map)
+   are now config, not new code.
 3. **Donations & fundraising.** Entirely absent. → `donations-design.md` (this batch).
 4. **Internal ops modules** — maintenance requests, inventory/equipment, incident reports,
    reimbursements. All should be *consumers* of gap #2, not new bespoke modules.

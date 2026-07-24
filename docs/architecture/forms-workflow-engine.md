@@ -9,12 +9,12 @@ depends_on: [system-design.md, domain-model.md, permissions.md, ../agents/agent-
 
 # Forms & Workflow Engine
 
-> **Status: PROPOSED.** Nothing in this document is built yet. It specifies the
-> `forms` and `workflows` modules named in `system-design.md §2` and the
-> `FORM_DEFINITION → FORM_VERSION → FORM_SUBMISSION` entities sketched in
-> `domain-model.md`. It lands in **Phase 5 (Maintenance & forms)** of
-> `roadmap/phased-plan.md`. All table and column names below are proposals open
-> to review, not committed schema.
+> **Status: BUILT (v1, 2026-07-24).** The `forms` and `workflows` modules are implemented per
+> this design (`app/modules/forms`, `app/modules/workflows`), with the **incident report** shipped
+> as the first consumer (seeded FormDefinition + WorkflowDefinition), a public `/forms/[key]`
+> renderer, and a `/admin/requests` reviewer inbox. Deferred as designed: real file uploads +
+> object storage, the onboarding re-map (opt-in later), and a visual form builder. Some column
+> names differ slightly from the sketch below; see the code for the authoritative schema.
 
 ## 1. Problem & thesis
 

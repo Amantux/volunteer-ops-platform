@@ -23,7 +23,7 @@ leave `main` green (tests + migrations + lint + typecheck + security checks + bu
 > | 2 | Training & onboarding | ◑ **Partial** — guest registration→verification→outbox email→waitlist→completion→conversion + quals live; **configurable onboarding *tracks* not built** |
 > | 3 | Scheduling & volunteer ops | ✅ **Done** — events/shifts/roles/signups, eligibility, check-in, hours, ICS, coordinator board + staffing metrics, + authenticated dashboards |
 > | 4 | Communications | ✅ **Done (core)** — templates, outbox, campaigns, audience preview, approval gate, suppression/unsubscribe. Gaps: visual editor, delivery/bounce surfacing |
-> | 5 | Maintenance & forms | ⬜ **Not started** — design now exists: `../architecture/forms-workflow-engine.md` |
+> | 5 | Maintenance & forms | ◑ **Forms/workflow engine BUILT** — `forms` + `workflows` modules + incident report (config) + public form renderer + reviewer inbox. Remaining: maintenance/inventory modules as engine consumers, real file uploads |
 > | 6 | Donations | ⬜ **Not started** — design now exists: `../architecture/donations-design.md` |
 > | 7 | Agents & MCP (real) | ◑ **Partial** — R0–R4 classifier, `AgentProposal` + approval route, MCP read/write split live (training/report tools). More agents/tools pending |
 > | 8 | Universalization | ◑ **Rescoped** — deployment is **single-tenant per instance** (owner directive); "new org" = new instance from config, not shared-DB tenancy. Remaining: per-instance config surface + a new-instance onboarding checklist. See `../architecture/multi-tenancy.md` |
