@@ -46,6 +46,34 @@ export function formatWhen(
   return `${date} · ${time}`;
 }
 
+export interface OpportunityShift {
+  shift_id: number;
+  starts_at: string;
+  ends_at: string;
+  location: string;
+  open_roles: number;
+}
+
+export interface Opportunity {
+  event_id: number;
+  title: string;
+  description: string;
+  kind: string;
+  next_shift_at: string | null;
+  location: string;
+  shift_count: number;
+  shifts: OpportunityShift[];
+}
+
+export interface CalendarItem {
+  type: 'training' | 'opportunity';
+  id: number;
+  title: string;
+  starts_at: string;
+  ends_at: string | null;
+  location: string;
+}
+
 export interface RegisterInput {
   name: string;
   email: string;
@@ -102,6 +130,24 @@ export async function getSessions(): Promise<Session[]> {
   });
   if (!res.ok) throw new ApiError(res.status, await parseError(res));
   return (await res.json()) as Session[];
+}
+
+export async function getOpportunities(): Promise<Opportunity[]> {
+  const res = await fetch(`${apiBase()}/public/opportunities`, {
+    cache: 'no-store',
+    headers: { accept: 'application/json' },
+  });
+  if (!res.ok) throw new ApiError(res.status, await parseError(res));
+  return (await res.json()) as Opportunity[];
+}
+
+export async function getCalendar(): Promise<CalendarItem[]> {
+  const res = await fetch(`${apiBase()}/public/calendar`, {
+    cache: 'no-store',
+    headers: { accept: 'application/json' },
+  });
+  if (!res.ok) throw new ApiError(res.status, await parseError(res));
+  return (await res.json()) as CalendarItem[];
 }
 
 export async function getSession(id: number): Promise<Session | null> {

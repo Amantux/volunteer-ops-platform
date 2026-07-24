@@ -154,7 +154,9 @@ a {
 }
 .site-nav {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .site-nav a {
   color: var(--text);
@@ -737,6 +739,252 @@ main {
 .btn-sm {
   min-height: 40px;
   padding: var(--space-2) var(--space-4);
+}
+
+/* Footer nav ------------------------------------------------------------ */
+.footer-nav {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+.footer-nav a {
+  color: var(--accent-ink);
+  text-decoration: none;
+  font-weight: 600;
+}
+.footer-nav a:hover {
+  text-decoration: underline;
+}
+
+/* Opportunities extras -------------------------------------------------- */
+.card-kind {
+  text-transform: capitalize;
+}
+.card-shift-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* FAQ (native disclosure) ----------------------------------------------- */
+.faq-list {
+  margin-top: var(--space-6);
+  display: grid;
+  gap: var(--space-3);
+  max-width: 720px;
+}
+.faq-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+.faq-item > summary {
+  cursor: pointer;
+  padding: var(--space-4) var(--space-6);
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+}
+.faq-item > summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item > summary::after {
+  content: "＋";
+  color: var(--text-muted);
+  font-weight: 400;
+  flex: none;
+}
+.faq-item[open] > summary::after {
+  content: "－";
+}
+.faq-item > summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+.faq-answer {
+  padding: 0 var(--space-6) var(--space-4);
+  color: var(--text-muted);
+}
+.faq-answer p {
+  margin: 0 0 var(--space-3);
+}
+.faq-answer p:last-child {
+  margin-bottom: 0;
+}
+
+/* Calendar -------------------------------------------------------------- */
+/* Two type markers reuse existing status role colors — no new accent hue. */
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+.cal-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.cal-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  flex: none;
+  border: 1px solid transparent;
+}
+.cal-dot-training {
+  background: var(--accent);
+}
+.cal-dot-opportunity {
+  background: var(--warning);
+}
+
+/* Grouped-by-date upcoming list (accessibility-first primary view). */
+.cal-day-group {
+  margin-top: var(--space-6);
+}
+.cal-day-heading {
+  font-size: 1.05rem;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+.cal-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.cal-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-card);
+}
+.cal-item-training {
+  border-left-color: var(--accent);
+}
+.cal-item-opportunity {
+  border-left-color: var(--warning);
+}
+.cal-item-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cal-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.cal-item-title {
+  font-weight: 600;
+}
+.cal-item-meta {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+}
+.cal-type-label {
+  text-transform: capitalize;
+}
+
+/* Month grid enhancement — real <table> semantics, renders server-side. */
+.cal-month {
+  margin-top: var(--space-8);
+}
+.cal-month + .cal-month {
+  margin-top: var(--space-6);
+}
+.cal-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.cal-grid caption {
+  text-align: left;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+.cal-grid th {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+.cal-grid td {
+  border: 1px solid var(--border);
+  vertical-align: top;
+  height: 84px;
+  padding: var(--space-1) var(--space-2);
+}
+.cal-grid td.cal-empty {
+  background: var(--surface-sunken);
+  border-color: var(--border);
+}
+.cal-daynum {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 2px;
+}
+.cal-cell-today .cal-daynum {
+  color: var(--accent-ink);
+}
+.cal-cell-today {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.cal-markers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.cal-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+.cal-marker-training {
+  background: var(--accent);
+}
+.cal-marker-opportunity {
+  background: var(--warning);
+}
+
+@media (max-width: 560px) {
+  .cal-grid td {
+    height: 52px;
+  }
+  .cal-item {
+    flex-direction: column;
+    gap: var(--space-1);
+  }
 }
 
 /* Responsive ------------------------------------------------------------ */

@@ -34,7 +34,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </Link>
             <nav className="site-nav" aria-label="Primary">
               <Link href="/">Home</Link>
+              <Link href="/opportunities">Opportunities</Link>
               <Link href="/trainings">Trainings</Link>
+              <Link href="/calendar">Calendar</Link>
+              <Link href="/about">About</Link>
               <AuthNav />
             </nav>
           </div>
@@ -44,6 +47,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <footer className="site-footer">
           <div className="container">
+            <nav className="footer-nav" aria-label="Footer">
+              <Link href="/faq">FAQ</Link>
+              <Link href="/contact">Contact</Link>
+            </nav>
             <p style={{ margin: 0 }}>
               Riverside Volunteers is a community nonprofit. Questions? Email{' '}
               <a href="mailto:hello@riverside-volunteers.org">
