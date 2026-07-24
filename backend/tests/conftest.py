@@ -1,14 +1,14 @@
-"""Test fixtures. Uses a file-based SQLite DB (shared across connections) for speed;
-production runs Postgres. Models are written portably so behavior matches."""
+"""Test fixtures. Uses an in-memory SQLite DB shared across all sessions via a single
+StaticPool connection (see app.core.db) — fast, and every session sees the same committed
+state, matching Postgres. Production runs Postgres; models are written portably so behavior
+matches."""
 
 from __future__ import annotations
 
 import os
-import tempfile
 
-# Point the app at a throwaway SQLite DB + the dev inbox email adapter BEFORE importing app.
-_DB_PATH = os.path.join(tempfile.gettempdir(), "vop_test.db")
-os.environ.setdefault("VOP_DATABASE_URL", f"sqlite:///{_DB_PATH}")
+# Point the app at an in-memory SQLite DB + the dev inbox email adapter BEFORE importing app.
+os.environ.setdefault("VOP_DATABASE_URL", "sqlite://")
 os.environ.setdefault("VOP_EMAIL_PROVIDER", "inbox")
 os.environ.setdefault("VOP_APP_SECRET", "test-secret")
 
@@ -28,6 +28,11 @@ from app.seed import seed_bootstrap  # noqa: E402
 def fresh_db():
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    # The in-process rate limiter keeps hit counts in a module global; without this reset
+    # they accumulate across the suite until public POSTs start returning 429 and later
+    # tests fail depending on run order.
+    from app.core import ratelimit
+    ratelimit._hits.clear()
     with SessionLocal() as db:
         seed_bootstrap(db)
     yield

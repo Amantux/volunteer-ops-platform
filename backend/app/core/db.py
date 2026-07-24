@@ -18,7 +18,18 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sess
 from .config import settings
 
 _connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-engine = create_engine(settings.database_url, connect_args=_connect_args, future=True)
+# In-memory SQLite (tests) must share ONE connection across every session, or each
+# connection gets its own private database. StaticPool does that; it also means all
+# sessions observe the same committed state (matching Postgres read-committed semantics)
+# instead of the per-connection snapshots a file-SQLite QueuePool can hand back.
+_engine_kwargs: dict[str, object] = {}
+if settings.database_url in ("sqlite://", "sqlite:///:memory:"):
+    from sqlalchemy.pool import StaticPool
+
+    _engine_kwargs["poolclass"] = StaticPool
+engine = create_engine(
+    settings.database_url, connect_args=_connect_args, future=True, **_engine_kwargs
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
