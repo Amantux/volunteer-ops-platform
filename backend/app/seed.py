@@ -28,6 +28,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "report.view_staffing", "shift.view_eligible", "shift.signup",
         "comms.manage", "comms.approve", "audit.view",
         "site.edit", "site.develop", "site.publish",
+        "social.draft", "social.manage", "social.approve", "social.publish",
     ],
     "trainer": [
         "training.manage_session", "training.record_attendance", "training.record_completion",
@@ -45,6 +46,9 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "site_editor": [
         "site.edit", "site.publish",
+    ],
+    "social_manager": [
+        "social.draft", "social.manage", "social.approve", "social.publish",
     ],
 }
 
@@ -94,6 +98,7 @@ def seed_bootstrap(db: Session) -> Organization:
     _seed_demo_training(db, org.id)
     _seed_demo_opportunity(db, org.id)
     _seed_pages(db, org.id)
+    _seed_social(db, org.id)
     db.commit()
     return org
 
@@ -227,4 +232,16 @@ def _seed_pages(db: Session, org_id: int) -> None:
         db.add(Page(org_id=org_id, slug=slug, title=title, status=PageStatus.published,
                     blocks=blocks, published_blocks=blocks, published_css="", published_at=now,
                     show_in_nav=True, nav_order=order))
+    db.flush()
+
+
+def _seed_social(db: Session, org_id: int) -> None:
+    """Seed one manual channel so the social composer works out of the box (no external creds)."""
+    from app.modules.social.models import Platform, SocialChannel
+
+    if db.scalar(select(func.count()).select_from(SocialChannel).where(
+            SocialChannel.org_id == org_id)):
+        return
+    db.add(SocialChannel(org_id=org_id, platform=Platform.manual, handle="@riverside",
+                         display_name="Riverside (manual)", char_limit=280))
     db.flush()

@@ -17,8 +17,10 @@ from sqlalchemy.orm import Session
 
 from app.core import audit
 from app.core.authz import PermissionDenied, Principal, require
-from app.modules.agents.models import ProposalStatus
+from app.modules.agents.models import AgentProposal, ProposalStatus
 from app.modules.agents.risk import RiskLevel
+from app.modules.social import service as social
+from app.modules.social.models import PostSource
 from app.modules.training.models import TrainingSession
 from app.modules.training.service import (
     TrainingError,
@@ -123,6 +125,33 @@ def _promote_waitlist_candidate(db: Session, principal: Principal, args: dict) -
         return {"promoted": False, "reason": "no eligible waitlisted candidate or no free seat"}
     return {"proposal_id": proposal.id, "status": proposal.status.value,
             "executed": proposal.status == ProposalStatus.auto_executed}
+
+
+@tool(ToolContract(
+    name="draft_social_post", permission="social.draft",
+    risk=RiskLevel.r1_draft, approval_required=False, reversible=True, idempotent=False,
+    audit_action="mcp.draft_social_post", data_classification="Internal",
+))
+def _draft_social_post(db: Session, principal: Principal, args: dict) -> dict:
+    """Draft social-post copy (assist only). Produces a DRAFT a human must review, approve, and
+    publish — there is deliberately no MCP tool that can publish. `social.publish` is R4."""
+    prompt = str(args.get("prompt", "")).strip()
+    if not prompt:
+        raise ToolError("prompt is required")
+    channel_ids = [int(c) for c in args.get("channel_ids", [])]
+    proposal = AgentProposal(
+        org_id=principal.org_id, agent="social", action="social.draft",
+        risk_level=RiskLevel.r1_draft, goal=prompt[:500],
+        requested_by_user_id=principal.user_id, status=ProposalStatus.proposed)
+    db.add(proposal)
+    db.flush()
+    post = social.create_post(
+        db, org_id=principal.org_id, created_by=principal.user_id, channel_ids=channel_ids,
+        source=PostSource.llm_assisted, prompt=prompt)
+    post.agent_proposal_id = proposal.id
+    db.flush()
+    return {"post_id": post.id, "status": post.status.value, "body": post.body,
+            "proposal_id": proposal.id}
 
 
 @tool(ToolContract(

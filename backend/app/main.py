@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, comms, content, ops, public, scheduling, trainer
+from app.api import admin, auth, comms, content, ops, public, scheduling, social, trainer
 from app.core.config import settings
 from app.core.db import SessionLocal, init_db
 from app.modules.communications import service as _comms  # noqa: F401  (registers outbox handler)
@@ -33,6 +33,8 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("VOP_EMAIL_PROVIDER=smtp requires VOP_SMTP_HOST to be set.")
     if settings.llm_provider == "anthropic" and not settings.llm_api_key:
         raise RuntimeError("VOP_LLM_PROVIDER=anthropic requires VOP_LLM_API_KEY to be set.")
+    if settings.social_publisher == "webhook" and not settings.social_webhook_url:
+        raise RuntimeError("VOP_SOCIAL_PUBLISHER=webhook requires VOP_SOCIAL_WEBHOOK_URL.")
     init_db()
     with SessionLocal() as db:
         seed_bootstrap(db)
@@ -56,7 +58,11 @@ app.include_router(scheduling.router)
 app.include_router(comms.router)
 app.include_router(content.admin_router)
 app.include_router(content.public_router)
+app.include_router(social.router)
 app.include_router(ops.router)
+
+# Import the social service so its "social.publish" outbox handler registers at startup.
+from app.modules.social import service as _social_service  # noqa: E402,F401
 
 
 @app.get("/api/health")

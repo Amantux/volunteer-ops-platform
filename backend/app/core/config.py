@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = ""
 
+    # Social publishing. "manual" (default: mark posted + export copy, no external effect) or
+    # "webhook" (POST to social_webhook_url, e.g. Zapier). Real platform adapters are deferred.
+    social_publisher: str = "manual"
+    social_webhook_url: str = ""
+
     # Rate limiting: "memory" (single node/dev/tests) | "redis" (multi-node/prod).
     ratelimit_backend: str = "memory"
     # Public-form bot control: "none" (dev) | "turnstile" (Cloudflare Turnstile).

@@ -43,6 +43,11 @@ from app.modules.scheduling.models import (  # noqa: F401
     ShiftSignup,
     VolunteerHourEntry,
 )
+from app.modules.social.models import (  # noqa: F401
+    SocialChannel,
+    SocialPost,
+    SocialPublishTarget,
+)
 from app.modules.training.models import (  # noqa: F401
     Course,
     TrainingRegistration,

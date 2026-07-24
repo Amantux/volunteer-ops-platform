@@ -12,6 +12,7 @@ PROHIBITED = frozenset({
     "comms.send_bulk", "comms.send_sensitive", "volunteer.reject", "volunteer.discipline",
     "permissions.change", "donation.refund", "finance.modify", "record.delete",
     "private_data.expose", "schedule.override_constraints", "content.publish_public",
+    "social.publish",  # agents may draft social copy, never publish it to a channel
 })
 
 APPROVAL_REQUIRED = frozenset({
@@ -23,7 +24,7 @@ LOW_EXECUTE = frozenset({  # explicit allowlist of low-risk autonomous actions
 })
 
 DRAFT = frozenset({
-    "comms.draft", "digest.generate", "report.draft", "maintenance.classify",
+    "comms.draft", "digest.generate", "report.draft", "maintenance.classify", "social.draft",
 })
 
 
