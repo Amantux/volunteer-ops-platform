@@ -13,6 +13,24 @@ Principle: ship the **smallest useful vertical slice**, validate it, review it, 
 with small reversible changes. Each phase has a Definition of Done (see brief §19) and must
 leave `main` green (tests + migrations + lint + typecheck + security checks + build).
 
+> **Delivery status (verified 2026-07-24).** This plan was authored at Phase 0. Much of it is
+> now built — see `../architecture/implemented-state.md` for the verified audit. Status:
+>
+> | Phase | Theme | Status |
+> |---|---|---|
+> | 0 | Discovery & foundations | ✅ **Done** — doc set + repo + compose boot |
+> | 1 | Public presence & content | ◑ **Partial** — public site + training catalog live; **CMS draft→publish not built** (pages hardcoded) |
+> | 2 | Training & onboarding | ◑ **Partial** — guest registration→verification→outbox email→waitlist→completion→conversion + quals live; **configurable onboarding *tracks* not built** |
+> | 3 | Scheduling & volunteer ops | ✅ **Done** — events/shifts/roles/signups, eligibility, check-in, hours, ICS, coordinator board + staffing metrics, + authenticated dashboards |
+> | 4 | Communications | ✅ **Done (core)** — templates, outbox, campaigns, audience preview, approval gate, suppression/unsubscribe. Gaps: visual editor, delivery/bounce surfacing |
+> | 5 | Maintenance & forms | ⬜ **Not started** — design now exists: `../architecture/forms-workflow-engine.md` |
+> | 6 | Donations | ⬜ **Not started** — design now exists: `../architecture/donations-design.md` |
+> | 7 | Agents & MCP (real) | ◑ **Partial** — R0–R4 classifier, `AgentProposal` + approval route, MCP read/write split live (training/report tools). More agents/tools pending |
+> | 8 | Universalization | ◑ **Rescoped** — deployment is **single-tenant per instance** (owner directive); "new org" = new instance from config, not shared-DB tenancy. Remaining: per-instance config surface + a new-instance onboarding checklist. See `../architecture/multi-tenancy.md` |
+>
+> **Brief ↔ this plan:** brief Phase 4 (internal tooling) = this plan's Phase 5; brief Phase 5
+> (donations + reporting) = Phase 6 + a reporting slice; brief Phase 6 (agents) = Phase 7.
+
 | Phase | Theme | Key deliverables | Depends on | Exit criteria |
 |---|---|---|---|---|
 | **0** | Discovery & foundations | Audit; product+arch docs; domain model; permissions matrix; threat model; metric dictionary; UX journeys; ADRs; migration+deploy strategy; backlog; non-goals | — | This doc set complete & internally coherent; skeleton repo + compose boots |

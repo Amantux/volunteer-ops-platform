@@ -1,12 +1,19 @@
 ---
 title: Current-State Audit
 owner: Architecture
-status: current
+status: superseded
 last_reviewed: 2026-07-22
 applies_to: platform
+superseded_by: implemented-state.md
 ---
 
 # Current-State Audit
+
+> ⚠️ **SUPERSEDED (2026-07-24).** This document describes the platform as *greenfield*, which
+> was true at Phase 0. The backend, frontend, CI, and agent/MCP layer are now **implemented and
+> tested**. For the verified record of what exists today, read
+> [`implemented-state.md`](./implemented-state.md). This file is retained only as the historical
+> pre-build audit and the source of the standing assumptions (A1–A6) still referenced elsewhere.
 
 ## Purpose
 Document what exists before proposing changes, per the operating model. This

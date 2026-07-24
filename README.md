@@ -7,10 +7,13 @@ brochure site with a signup form — it supports the full volunteer lifecycle.
 
 Built org-scoped so a second organization onboards by **configuration, not a rewrite**.
 
-> **Status: Phase 0 (Discovery & Foundations).** Per the operating model, the product and
-> architecture are designed and documented **before** large-scale code. The first vertical
-> slice (public training registration → volunteer conversion) is specified and ready to
-> build. See `docs/roadmap/first-slice.md`.
+> **Status: Phases 1–4 substantially built; deployment is single-tenant per instance.**
+> Implemented and tested: passwordless auth + scope-aware RBAC, public site + training/onboarding,
+> scheduling + volunteer/coordinator dashboards, communications (approval-gated campaigns +
+> suppression), governed agents/MCP, CI. For the **verified** current state see
+> `docs/architecture/implemented-state.md`; for status per phase see
+> `docs/roadmap/phased-plan.md`. Designed-but-not-built (specs ready): forms/workflow engine,
+> donations, internal ops modules, CMS, unified reporting.
 
 ## Architecture at a glance
 Modular monolith: **FastAPI + PostgreSQL + Redis/Celery**, **Next.js/React + TypeScript**
