@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, comms, ops, public, scheduling, trainer
+from app.api import admin, auth, comms, content, ops, public, scheduling, trainer
 from app.core.config import settings
 from app.core.db import SessionLocal, init_db
 from app.modules.communications import service as _comms  # noqa: F401  (registers outbox handler)
@@ -31,6 +31,8 @@ async def lifespan(app: FastAPI):
     # Fail fast on incomplete provider config rather than silently dropping mail.
     if settings.email_provider == "smtp" and not settings.smtp_host:
         raise RuntimeError("VOP_EMAIL_PROVIDER=smtp requires VOP_SMTP_HOST to be set.")
+    if settings.llm_provider == "anthropic" and not settings.llm_api_key:
+        raise RuntimeError("VOP_LLM_PROVIDER=anthropic requires VOP_LLM_API_KEY to be set.")
     init_db()
     with SessionLocal() as db:
         seed_bootstrap(db)
@@ -52,6 +54,8 @@ app.include_router(trainer.router)
 app.include_router(admin.router)
 app.include_router(scheduling.router)
 app.include_router(comms.router)
+app.include_router(content.admin_router)
+app.include_router(content.public_router)
 app.include_router(ops.router)
 
 

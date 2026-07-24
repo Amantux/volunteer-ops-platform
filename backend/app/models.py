@@ -14,6 +14,10 @@ from app.modules.communications.models import (  # noqa: F401
     InboxMessage,
     Suppression,
 )
+from app.modules.content.models import (  # noqa: F401
+    Page,
+    PageRevision,
+)
 from app.modules.identity.models import (  # noqa: F401
     Person,
     Role,

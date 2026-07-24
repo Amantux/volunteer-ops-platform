@@ -27,6 +27,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "shift.manage", "shift.view_roster", "shift.record_attendance", "hours.approve",
         "report.view_staffing", "shift.view_eligible", "shift.signup",
         "comms.manage", "comms.approve", "audit.view",
+        "site.edit", "site.develop", "site.publish",
     ],
     "trainer": [
         "training.manage_session", "training.record_attendance", "training.record_completion",
@@ -41,6 +42,9 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "comms_manager": [
         "comms.manage",
+    ],
+    "site_editor": [
+        "site.edit", "site.publish",
     ],
 }
 
@@ -89,6 +93,7 @@ def seed_bootstrap(db: Session) -> Organization:
     _seed_templates(db, org.id)
     _seed_demo_training(db, org.id)
     _seed_demo_opportunity(db, org.id)
+    _seed_pages(db, org.id)
     db.commit()
     return org
 
@@ -181,4 +186,45 @@ def _seed_demo_opportunity(db: Session, org_id: int) -> None:
                                         location="Riverside Community Garden")
         scheduling.add_role(db, org_id=org_id, shift_id=shift.id, name="Garden Helper",
                             capacity=8)
+    db.flush()
+
+
+def _seed_pages(db: Session, org_id: int) -> None:
+    """Seed the starter public pages as editable, published Page rows so the website builder
+    manages a real (non-lorem) site out of the box."""
+    from app.core.db import utcnow
+    from app.modules.content.models import Page, PageStatus
+
+    if db.scalar(select(func.count()).select_from(Page).where(Page.org_id == org_id)):
+        return
+
+    def para(text: str) -> dict:
+        return {"type": "paragraph", "html": f"<p>{text}</p>"}
+
+    # Demo pages the builder owns, at slugs that don't collide with the app's built-in routes.
+    # (The built-in about/faq/contact pages remain hardcoded; moving them into the builder is a
+    # follow-up — see docs. These show the builder end-to-end and populate the public nav.)
+    pages = [
+        ("our-story", "Our story", 1, [
+            {"type": "heading", "level": 1, "text": "Our story"},
+            para("Riverside Volunteers began with a handful of neighbours and a simple idea: "
+                 "that a community is strongest when everyone has a way to help. Today we train "
+                 "and mobilise hundreds of local volunteers across food security, emergency "
+                 "response, and everyday care."),
+            para("No experience is required to start — just a willingness to help. We provide "
+                 "the training, the tools, and a welcoming team."),
+            {"type": "button", "label": "Browse opportunities", "href": "/opportunities"},
+        ]),
+        ("get-involved", "Get involved", 2, [
+            {"type": "heading", "level": 1, "text": "Get involved"},
+            para("There's a place for everyone here. Start with a free orientation, then pick "
+                 "the opportunities that fit your schedule and interests."),
+            {"type": "button", "label": "See upcoming trainings", "href": "/trainings"},
+        ]),
+    ]
+    now = utcnow()
+    for slug, title, order, blocks in pages:
+        db.add(Page(org_id=org_id, slug=slug, title=title, status=PageStatus.published,
+                    blocks=blocks, published_blocks=blocks, published_css="", published_at=now,
+                    show_in_nav=True, nav_order=order))
     db.flush()

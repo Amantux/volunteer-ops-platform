@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # Unverified "registered" holds expire (freeing the seat) after this long.
     unconfirmed_hold_ttl_min: int = 60 * 24
 
+    # LLM drafting assist (optional). "dev" = deterministic local stub (default, no key needed);
+    # "anthropic" = real API when llm_api_key is set. AI is assist-only; nothing auto-publishes.
+    llm_provider: str = "dev"
+    llm_api_key: str = ""
+    llm_model: str = ""
+
     # Rate limiting: "memory" (single node/dev/tests) | "redis" (multi-node/prod).
     ratelimit_backend: str = "memory"
     # Public-form bot control: "none" (dev) | "turnstile" (Cloudflare Turnstile).
