@@ -44,6 +44,8 @@ class Event(Base, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     kind: Mapped[str] = mapped_column(String(30), default="event", nullable=False)  # event|project|maintenance
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    # Opt-in publishing: only public, active events appear on the public site/calendar.
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     shifts: Mapped[list[Shift]] = relationship(back_populates="event", cascade="all, delete-orphan")
 

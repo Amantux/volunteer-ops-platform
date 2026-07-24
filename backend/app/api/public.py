@@ -10,7 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import botcheck, ratelimit
+from app.core.db import utcnow
 from app.modules.org.models import Organization
+from app.modules.scheduling import service as scheduling
 from app.modules.training.models import RegistrationStatus, TrainingSession
 from app.modules.training.service import TrainingError, register_guest, verify_email
 
@@ -112,3 +114,79 @@ def verify(payload: VerifyIn, db: Session = Depends(get_db)):
         message=("You're on the waitlist — we'll email you if a spot opens."
                  if waitlisted else "You're confirmed. Thank you for volunteering!"),
     )
+
+
+class OpportunityShiftOut(BaseModel):
+    shift_id: int
+    starts_at: datetime
+    ends_at: datetime
+    location: str
+    open_roles: int
+
+
+class OpportunityOut(BaseModel):
+    event_id: int
+    title: str
+    description: str
+    kind: str
+    next_shift_at: datetime
+    location: str
+    shift_count: int
+    shifts: list[OpportunityShiftOut]
+
+
+@router.get("/opportunities", response_model=list[OpportunityOut])
+def list_opportunities(db: Session = Depends(get_db),
+                       org: Organization = Depends(get_public_org)):
+    """Public volunteer opportunities: active, published events with upcoming open shifts.
+
+    An explicit response_model gates the payload so no future service field is auto-exposed on
+    this unauthenticated route.
+    """
+    return scheduling.public_opportunities(db, org_id=org.id)
+
+
+class CalendarItem(BaseModel):
+    type: str            # "training" | "opportunity"
+    id: int              # session_id (training) or event_id (opportunity)
+    title: str
+    starts_at: datetime
+    ends_at: datetime | None
+    location: str
+
+
+@router.get("/calendar", response_model=list[CalendarItem])
+def calendar(db: Session = Depends(get_db), org: Organization = Depends(get_public_org)):
+    """Unified public calendar: upcoming public training sessions + opportunity shifts, sorted.
+
+    Only scheduled (dated) items appear — a calendar entry needs a start time. Undated,
+    flexible training still shows on the trainings page, just not here.
+    """
+    items: list[CalendarItem] = []
+    now = utcnow()
+
+    sessions = db.scalars(
+        select(TrainingSession)
+        .join(TrainingSession.course)
+        .where(TrainingSession.org_id == org.id, TrainingSession.is_open.is_(True),
+               TrainingSession.starts_at.is_not(None))
+    )
+    for s in sessions:
+        if not s.course.is_public or s.starts_at is None:
+            continue
+        # Exclude past sessions — `is_open` is a manual flag, not time-derived, so a stale
+        # open session would otherwise linger on the calendar (mirrors the opportunity branch).
+        if (s.ends_at or s.starts_at) <= now:
+            continue
+        items.append(CalendarItem(type="training", id=s.id, title=s.course.title,
+                                  starts_at=s.starts_at, ends_at=s.ends_at, location=s.location))
+
+    for opp in scheduling.public_opportunities(db, org_id=org.id):
+        for shift in opp["shifts"]:
+            items.append(CalendarItem(
+                type="opportunity", id=opp["event_id"], title=opp["title"],
+                starts_at=datetime.fromisoformat(shift["starts_at"]),
+                ends_at=datetime.fromisoformat(shift["ends_at"]), location=shift["location"]))
+
+    items.sort(key=lambda i: i.starts_at)
+    return items

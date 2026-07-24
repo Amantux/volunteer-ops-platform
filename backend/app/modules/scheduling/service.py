@@ -39,9 +39,10 @@ class Eligibility:
 # --- Setup (coordinator) ---------------------------------------------------- #
 
 def create_event(db: Session, *, org_id: int, title: str, kind: str = "event",
-                 description: str = "", program_id: int | None = None) -> Event:
+                 description: str = "", program_id: int | None = None,
+                 is_public: bool = False) -> Event:
     event = Event(org_id=org_id, title=title, kind=kind, description=description,
-                  program_id=program_id)
+                  program_id=program_id, is_public=is_public)
     db.add(event)
     db.flush()
     return event
@@ -352,3 +353,45 @@ def coordinator_board(db: Session, *, org_id: int) -> list[dict]:
             "shifts": shifts,
         })
     return board
+
+
+def public_opportunities(db: Session, *, org_id: int) -> list[dict]:
+    """Public, active events that still have upcoming shifts — the visitor-facing opportunity
+    list. Only ``is_public`` events are exposed; each opportunity summarises its next upcoming
+    shift and how many roles still have open seats. No volunteer PII is included.
+    """
+    now = utcnow()
+    events = db.scalars(
+        select(Event)
+        .where(Event.org_id == org_id, Event.status == "active", Event.is_public.is_(True))
+        .order_by(Event.id)
+    ).all()
+    out: list[dict] = []
+    for event in events:
+        upcoming = sorted(
+            (s for s in event.shifts if s.is_open and s.ends_at > now),
+            key=lambda s: s.starts_at,
+        )
+        if not upcoming:
+            continue
+        shifts = [
+            {
+                "shift_id": s.id,
+                "starts_at": s.starts_at.isoformat(),
+                "ends_at": s.ends_at.isoformat(),
+                "location": s.location,
+                "open_roles": sum(1 for r in s.roles if r.seats_available),
+            }
+            for s in upcoming
+        ]
+        out.append({
+            "event_id": event.id,
+            "title": event.title,
+            "description": event.description,
+            "kind": event.kind,
+            "next_shift_at": upcoming[0].starts_at.isoformat(),
+            "location": upcoming[0].location,
+            "shift_count": len(shifts),
+            "shifts": shifts,
+        })
+    return out

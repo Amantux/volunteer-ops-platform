@@ -88,6 +88,7 @@ def seed_bootstrap(db: Session) -> Organization:
     _seed_admin(db, org.id)
     _seed_templates(db, org.id)
     _seed_demo_training(db, org.id)
+    _seed_demo_opportunity(db, org.id)
     db.commit()
     return org
 
@@ -153,4 +154,31 @@ def _seed_demo_training(db: Session, org_id: int) -> None:
     db.add(TrainingSession(org_id=org_id, course_id=course.id, capacity=20,
                            location="Community Center, Room A",
                            starts_at=start, ends_at=start + timedelta(hours=2)))
+    db.flush()
+
+
+def _seed_demo_opportunity(db: Session, org_id: int) -> None:
+    """A public volunteer opportunity with a couple of upcoming shifts, so the public
+    calendar and opportunities page show real data out of the box."""
+    from datetime import timedelta
+
+    from app.core.db import utcnow
+    from app.modules.scheduling import service as scheduling
+    from app.modules.scheduling.models import Event
+
+    if db.scalar(select(func.count()).select_from(Event).where(Event.org_id == org_id)):
+        return
+    event = scheduling.create_event(
+        db, org_id=org_id, title="Community Garden Workday", kind="event", is_public=True,
+        description="Help plant, weed, and tend the neighbourhood garden. No experience "
+                    "needed — tools, gloves, and guidance provided. Great for individuals, "
+                    "families, and groups.")
+    for week in (1, 2):
+        start = (utcnow() + timedelta(days=7 * week)).replace(
+            hour=9, minute=0, second=0, microsecond=0)
+        shift = scheduling.create_shift(db, org_id=org_id, event_id=event.id, starts_at=start,
+                                        ends_at=start + timedelta(hours=3),
+                                        location="Riverside Community Garden")
+        scheduling.add_role(db, org_id=org_id, shift_id=shift.id, name="Garden Helper",
+                            capacity=8)
     db.flush()

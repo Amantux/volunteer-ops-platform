@@ -43,9 +43,8 @@ def test_coordinator_board_shows_events_shifts_and_signups(client, db, org, admi
     client.post("/api/shifts/signup", headers=vol, json={"role_id": role.id})
 
     board = client.get("/api/coordinator/board", headers=admin_headers).json()
-    assert len(board) == 1
-    event = board[0]
-    assert event["title"] == "Cleanup"
+    # Seed-independent: find the event this test created (the demo seed adds others).
+    event = next(e for e in board if e["title"] == "Cleanup")
     role_row = event["shifts"][0]["roles"][0]
     assert role_row["capacity"] == 2 and role_row["filled"] == 1
     assert role_row["signups"][0]["volunteer"] == "vol@x.org"

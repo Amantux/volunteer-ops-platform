@@ -59,6 +59,7 @@ class EventIn(BaseModel):
     kind: str = "event"
     description: str = ""
     program_id: int | None = None
+    is_public: bool = False
 
 
 class ShiftIn(BaseModel):
@@ -85,7 +86,7 @@ def create_event(payload: EventIn, db: Session = Depends(get_db),
     _enforce_scope(db, principal, "shift.manage", payload.program_id)
     ev = service.create_event(db, org_id=principal.org_id, title=payload.title,
                               kind=payload.kind, description=payload.description,
-                              program_id=payload.program_id)
+                              program_id=payload.program_id, is_public=payload.is_public)
     db.commit()
     return IdOut(id=ev.id)
 
