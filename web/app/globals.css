@@ -541,6 +541,204 @@ main {
   border: 0;
 }
 
+/* Auth + dashboard ------------------------------------------------------ */
+/* Narrow single-column canvas for the sign-in / activate forms. */
+.auth-narrow {
+  max-width: 460px;
+}
+
+/* Sign-out control in the header nav — looks like the sibling nav links. */
+.nav-signout {
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.nav-signout:hover {
+  background: var(--surface-sunken);
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.page-head h1 {
+  margin-bottom: var(--space-1);
+}
+
+.dashboard-section {
+  margin-top: var(--space-8);
+}
+
+/* Stacked card list (full width, one column) — used on the dashboard. */
+.card-list.stack {
+  grid-template-columns: 1fr;
+  max-width: none;
+}
+
+.section-gap {
+  margin-top: var(--space-8);
+}
+
+/* A heading row with a trailing status pill / meta. */
+.row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.row-head h3,
+.row-head h4 {
+  margin: 0;
+}
+
+/* Inline definition grid inside a card. */
+.detail-grid-inline {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+.detail-grid-inline dt {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin: 0;
+}
+.detail-grid-inline dd {
+  margin: 0;
+}
+
+/* Staffing metrics */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-4);
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.metric-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.metric-label {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.understaffed {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.understaffed h3 {
+  font-size: 1rem;
+  margin-bottom: var(--space-3);
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.plain-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Roster board */
+.event-card {
+  margin-top: var(--space-4);
+}
+.event-card + .event-card {
+  margin-top: var(--space-4);
+}
+.shift-block {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.shift-when {
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+.pill-inline {
+  margin-left: var(--space-2);
+}
+.role-block {
+  padding: var(--space-3) 0;
+}
+.no-signups {
+  margin: var(--space-2) 0 0;
+  font-size: 0.95rem;
+}
+
+.signup-row {
+  padding: var(--space-2) 0;
+}
+.signup-main {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.signup-name {
+  font-weight: 600;
+}
+.signup-status {
+  font-size: 0.9rem;
+}
+.signup-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+.hours-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.hours-input {
+  width: 90px;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.hours-input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+/* Compact button variant for dense roster rows. */
+.btn-sm {
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+}
+
 /* Responsive ------------------------------------------------------------ */
 @media (min-width: 900px) {
   .feature-grid {

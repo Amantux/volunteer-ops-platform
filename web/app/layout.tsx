@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import AuthNav from '@/components/AuthNav';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav className="site-nav" aria-label="Primary">
               <Link href="/">Home</Link>
               <Link href="/trainings">Trainings</Link>
+              <AuthNav />
             </nav>
           </div>
         </header>

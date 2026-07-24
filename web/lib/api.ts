@@ -69,7 +69,7 @@ export class ApiError extends Error {
 
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api';
 
-function apiBase(): string {
+export function apiBase(): string {
   // In the browser we always use the (possibly relative) public base and let
   // the Next rewrite proxy forward it.
   if (typeof window !== 'undefined') return PUBLIC_BASE;
@@ -78,7 +78,7 @@ function apiBase(): string {
   return process.env.API_INTERNAL_BASE ?? 'http://localhost:8000/api';
 }
 
-async function parseError(res: Response): Promise<string> {
+export async function parseError(res: Response): Promise<string> {
   try {
     const body: unknown = await res.json();
     if (
