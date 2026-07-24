@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api import admin, auth, public, scheduling, trainer
+from app.api import admin, auth, comms, public, scheduling, trainer
 from app.core.config import settings
 from app.core.db import SessionLocal, init_db
 from app.modules.communications import service as _comms  # noqa: F401  (registers outbox handler)
@@ -49,6 +49,7 @@ app.include_router(auth.router)
 app.include_router(trainer.router)
 app.include_router(admin.router)
 app.include_router(scheduling.router)
+app.include_router(comms.router)
 
 
 @app.get("/api/health")

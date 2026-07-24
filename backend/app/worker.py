@@ -16,6 +16,7 @@ celery_app = Celery("vop", broker=settings.redis_url, backend=settings.redis_url
 celery_app.conf.beat_schedule = {
     "relay-outbox": {"task": "app.worker.relay_outbox", "schedule": 5.0},
     "expire-holds": {"task": "app.worker.expire_holds", "schedule": 300.0},
+    "send-due-campaigns": {"task": "app.worker.send_due_campaigns", "schedule": 60.0},
 }
 celery_app.conf.timezone = "UTC"
 
@@ -35,3 +36,12 @@ def expire_holds() -> int:
 
     with SessionLocal() as db:
         return expire_unconfirmed_holds(db)
+
+
+@celery_app.task(name="app.worker.send_due_campaigns")
+def send_due_campaigns() -> int:
+    """Send approved campaigns whose scheduled time has arrived."""
+    from app.modules.communications.campaigns import send_due_campaigns as _send
+
+    with SessionLocal() as db:
+        return _send(db)

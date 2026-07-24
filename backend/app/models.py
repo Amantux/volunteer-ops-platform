@@ -6,10 +6,13 @@ from app.core.audit import AuditEvent  # noqa: F401
 from app.core.outbox import OutboxEvent  # noqa: F401
 from app.modules.agents.models import AgentProposal  # noqa: F401
 from app.modules.communications.models import (  # noqa: F401
+    AudienceDefinition,
+    EmailCampaign,
     EmailDeliveryEvent,
     EmailMessage,
     EmailTemplate,
     InboxMessage,
+    Suppression,
 )
 from app.modules.identity.models import (  # noqa: F401
     Person,

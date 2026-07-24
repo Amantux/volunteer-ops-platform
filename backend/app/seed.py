@@ -25,7 +25,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "training.record_attendance", "training.record_completion", "training.view_roster",
         "training.approve_promotion", "training.register_guest", "report.view_training",
         "shift.manage", "shift.view_roster", "shift.record_attendance", "hours.approve",
-        "report.view_staffing", "shift.view_eligible", "shift.signup", "audit.view",
+        "report.view_staffing", "shift.view_eligible", "shift.signup",
+        "comms.manage", "comms.approve", "audit.view",
     ],
     "trainer": [
         "training.manage_session", "training.record_attendance", "training.record_completion",
@@ -37,6 +38,9 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "volunteer": [
         "shift.view_eligible", "shift.signup",
+    ],
+    "comms_manager": [
+        "comms.manage",
     ],
 }
 
@@ -65,6 +69,10 @@ TEMPLATES: dict[str, tuple[str, str]] = {
         "Your sign-in link",
         "Hi {{name}},\n\nUse this link to sign in:\n{{login_url}}\n\nIt expires soon and can be "
         "used once. If you didn't request this, you can ignore it.",
+    ),
+    "newsletter": (
+        "News from Riverside Volunteers",
+        "Hi {{name}},\n\nHere's the latest from the team. Thank you for volunteering!",
     ),
 }
 

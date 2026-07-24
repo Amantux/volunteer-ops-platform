@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: b0613c73171c
+Revision ID: b839bf8c2bfb
 Revises: 
-Create Date: 2026-07-24 05:25:10.805462
+Create Date: 2026-07-24 05:31:59.641825
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = 'b0613c73171c'
+revision: str = 'b839bf8c2bfb'
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -59,6 +59,17 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_dev_inbox_message_org_id'), 'dev_inbox_message', ['org_id'], unique=False)
+    op.create_table('email_audience_definition',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('org_id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=160), nullable=False),
+    sa.Column('rule', sa.JSON(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['org_id'], ['organization.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_email_audience_definition_org_id'), 'email_audience_definition', ['org_id'], unique=False)
     op.create_table('email_message',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('org_id', sa.Integer(), nullable=False),
@@ -77,6 +88,19 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_email_message_org_id'), 'email_message', ['org_id'], unique=False)
     op.create_index(op.f('ix_email_message_outbox_event_id'), 'email_message', ['outbox_event_id'], unique=True)
+    op.create_table('email_suppression',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('org_id', sa.Integer(), nullable=False),
+    sa.Column('email', sa.String(length=320), nullable=False),
+    sa.Column('reason', sa.String(length=40), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['org_id'], ['organization.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('org_id', 'email', name='uq_suppression_email')
+    )
+    op.create_index(op.f('ix_email_suppression_email'), 'email_suppression', ['email'], unique=False)
+    op.create_index(op.f('ix_email_suppression_org_id'), 'email_suppression', ['org_id'], unique=False)
     op.create_table('email_template',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('org_id', sa.Integer(), nullable=False),
@@ -271,6 +295,25 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_agent_proposal_org_id'), 'agent_proposal', ['org_id'], unique=False)
+    op.create_table('email_campaign',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('org_id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=200), nullable=False),
+    sa.Column('template_key', sa.String(length=80), nullable=False),
+    sa.Column('audience_id', sa.Integer(), nullable=False),
+    sa.Column('status', sa.Enum('draft', 'pending_approval', 'approved', 'scheduled', 'sending', 'sent', 'cancelled', name='campaignstatus'), nullable=False),
+    sa.Column('approved_recipient_count', sa.Integer(), nullable=True),
+    sa.Column('approved_by_user_id', sa.Integer(), nullable=True),
+    sa.Column('scheduled_at', sa.DateTime(), nullable=True),
+    sa.Column('sent_at', sa.DateTime(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['approved_by_user_id'], ['app_user.id'], ),
+    sa.ForeignKeyConstraint(['audience_id'], ['email_audience_definition.id'], ),
+    sa.ForeignKeyConstraint(['org_id'], ['organization.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_email_campaign_org_id'), 'email_campaign', ['org_id'], unique=False)
     op.create_table('shift',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('org_id', sa.Integer(), nullable=False),
@@ -448,6 +491,8 @@ def downgrade() -> None:
     op.drop_table('training_session')
     op.drop_index(op.f('ix_shift_org_id'), table_name='shift')
     op.drop_table('shift')
+    op.drop_index(op.f('ix_email_campaign_org_id'), table_name='email_campaign')
+    op.drop_table('email_campaign')
     op.drop_index(op.f('ix_agent_proposal_org_id'), table_name='agent_proposal')
     op.drop_table('agent_proposal')
     op.drop_index(op.f('ix_volunteer_profile_org_id'), table_name='volunteer_profile')
@@ -476,9 +521,14 @@ def downgrade() -> None:
     op.drop_table('organization_setting')
     op.drop_index(op.f('ix_email_template_org_id'), table_name='email_template')
     op.drop_table('email_template')
+    op.drop_index(op.f('ix_email_suppression_org_id'), table_name='email_suppression')
+    op.drop_index(op.f('ix_email_suppression_email'), table_name='email_suppression')
+    op.drop_table('email_suppression')
     op.drop_index(op.f('ix_email_message_outbox_event_id'), table_name='email_message')
     op.drop_index(op.f('ix_email_message_org_id'), table_name='email_message')
     op.drop_table('email_message')
+    op.drop_index(op.f('ix_email_audience_definition_org_id'), table_name='email_audience_definition')
+    op.drop_table('email_audience_definition')
     op.drop_index(op.f('ix_dev_inbox_message_org_id'), table_name='dev_inbox_message')
     op.drop_table('dev_inbox_message')
     op.drop_index(op.f('ix_audit_event_org_id'), table_name='audit_event')
