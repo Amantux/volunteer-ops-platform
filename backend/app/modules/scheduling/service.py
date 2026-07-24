@@ -262,3 +262,93 @@ def staffing_metrics(db: Session, *, org_id: int) -> dict:
         "fill_rate": round(filled / total_capacity, 3) if total_capacity else 0.0,
         "understaffed": understaffed,
     }
+
+
+# --- Read models for the authenticated dashboards --------------------------- #
+
+def my_signups(db: Session, *, org_id: int, profile_id: int) -> list[dict]:
+    """A volunteer's own non-cancelled signups, upcoming first, for their dashboard."""
+    signups = db.scalars(
+        select(ShiftSignup)
+        .join(ShiftSignup.role)
+        .join(ShiftRole.shift)
+        .where(
+            ShiftSignup.org_id == org_id,
+            ShiftSignup.volunteer_profile_id == profile_id,
+            ShiftSignup.status != SignupStatus.cancelled,
+        )
+        .order_by(Shift.starts_at)
+    ).all()
+    out: list[dict] = []
+    for s in signups:
+        shift = s.role.shift
+        out.append({
+            "signup_id": s.id,
+            "status": s.status.value,
+            "waitlisted": s.status == SignupStatus.waitlisted,
+            "event_title": shift.event.title,
+            "role": s.role.name,
+            "starts_at": shift.starts_at.isoformat(),
+            "ends_at": shift.ends_at.isoformat(),
+            "location": shift.location,
+        })
+    return out
+
+
+def coordinator_board(db: Session, *, org_id: int) -> list[dict]:
+    """Upcoming events → shifts → roles with their signups, for the coordinator view.
+
+    Includes each signup's id + volunteer name + status so the coordinator can check in
+    attendees and log hours against a concrete signup.
+    """
+    from app.modules.identity.models import Person
+    from app.modules.people.models import VolunteerProfile
+
+    events = db.scalars(
+        select(Event).where(Event.org_id == org_id, Event.status == "active").order_by(Event.id)
+    ).all()
+    names: dict[int, str] = {
+        pid: name
+        for pid, name in db.execute(
+            select(VolunteerProfile.id, Person.name)
+            .join(Person, Person.id == VolunteerProfile.person_id)
+            .where(VolunteerProfile.org_id == org_id)
+        ).all()
+    }
+    board: list[dict] = []
+    for event in events:
+        shifts = []
+        for shift in sorted(event.shifts, key=lambda s: s.starts_at):
+            roles = [
+                {
+                    "role_id": role.id,
+                    "role": role.name,
+                    "filled": role.confirmed_count,
+                    "capacity": role.capacity,
+                    "signups": [
+                        {
+                            "signup_id": s.id,
+                            "volunteer": names.get(s.volunteer_profile_id, "Unknown"),
+                            "status": s.status.value,
+                        }
+                        for s in role.signups
+                        if s.status != SignupStatus.cancelled
+                    ],
+                }
+                for role in shift.roles
+            ]
+            shifts.append({
+                "shift_id": shift.id,
+                "starts_at": shift.starts_at.isoformat(),
+                "ends_at": shift.ends_at.isoformat(),
+                "location": shift.location,
+                "is_open": shift.is_open,
+                "roles": roles,
+            })
+        board.append({
+            "event_id": event.id,
+            "title": event.title,
+            "kind": event.kind,
+            "shifts": shifts,
+        })
+    return board

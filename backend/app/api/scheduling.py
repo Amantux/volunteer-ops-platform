@@ -123,6 +123,13 @@ def staffing(db: Session = Depends(get_db),
     return service.staffing_metrics(db, org_id=principal.org_id)
 
 
+@router.get("/coordinator/board")
+def board(db: Session = Depends(get_db),
+          principal: Principal = Depends(require_permission("shift.view_roster"))):
+    """Events → shifts → roles → signups for the coordinator schedule view."""
+    return service.coordinator_board(db, org_id=principal.org_id)
+
+
 class CheckinIn(BaseModel):
     signup_id: int
 
@@ -174,6 +181,14 @@ def eligible(db: Session = Depends(get_db),
              principal: Principal = Depends(require_permission("shift.view_eligible"))):
     return service.eligible_open_roles(db, org_id=principal.org_id,
                                        profile_id=_my_profile(db, principal))
+
+
+@router.get("/shifts/mine")
+def my_shifts(db: Session = Depends(get_db),
+              principal: Principal = Depends(require_permission("shift.view_eligible"))):
+    """The signed-in volunteer's own signups (for their dashboard)."""
+    return service.my_signups(db, org_id=principal.org_id,
+                              profile_id=_my_profile(db, principal))
 
 
 class SignupIn(BaseModel):

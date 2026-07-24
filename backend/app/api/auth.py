@@ -9,16 +9,17 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.authz import Principal, permissions_for
 from app.core.config import settings
 from app.core.db import utcnow
 from app.core.security import generate_token, hash_token
 from app.core.session import make_session_token
 from app.modules.communications.service import queue_email
-from app.modules.identity.models import Person, TokenPurpose, VerificationToken
+from app.modules.identity.models import Person, TokenPurpose, User, VerificationToken
 from app.modules.org.models import Organization
-from app.modules.people.service import ActivationError, activate_volunteer
+from app.modules.people.service import ActivationError, activate_volunteer, profile_for_user
 
-from .deps import get_db, get_public_org
+from .deps import current_principal, get_db, get_public_org
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -85,6 +86,28 @@ def login(payload: TokenIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Activate your volunteer account first")
     db.commit()
     return SessionOut(token=make_session_token(user_id=person.user.id, org_id=person.org_id))
+
+
+class MeOut(BaseModel):
+    name: str
+    email: str
+    permissions: list[str]
+    has_volunteer_profile: bool
+
+
+@router.get("/me", response_model=MeOut)
+def me(db: Session = Depends(get_db), principal: Principal = Depends(current_principal)):
+    """The signed-in user's identity + permissions — drives which dashboard the UI shows."""
+    user = db.get(User, principal.user_id)
+    if user is None or user.org_id != principal.org_id:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    profile = profile_for_user(db, org_id=principal.org_id, user_id=principal.user_id)
+    return MeOut(
+        name=user.person.name,
+        email=user.person.email,
+        permissions=sorted(permissions_for(db, user_id=principal.user_id, org_id=principal.org_id)),
+        has_volunteer_profile=profile is not None,
+    )
 
 
 @router.post("/activate", response_model=SessionOut)
