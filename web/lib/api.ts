@@ -182,3 +182,82 @@ export async function verifyToken(token: string): Promise<RegisterResult> {
   if (!res.ok) throw new ApiError(res.status, await parseError(res));
   return (await res.json()) as RegisterResult;
 }
+
+// ---------------------------------------------------------------------------
+// CMS site builder — block schema (shared by the public renderer and the
+// admin editor). This is the render-shape: html/embed content arrives under
+// `safe_html` / `raw_html` (see the round-trip note in <PageBlocks>).
+// ---------------------------------------------------------------------------
+export interface HeadingBlock {
+  type: 'heading';
+  level: number;
+  text: string;
+}
+export interface ParagraphBlock {
+  type: 'paragraph';
+  html: string;
+}
+export interface ImageBlock {
+  type: 'image';
+  url: string;
+  alt: string;
+}
+export interface ButtonBlock {
+  type: 'button';
+  label: string;
+  href: string;
+}
+export interface DividerBlock {
+  type: 'divider';
+}
+export interface HtmlBlock {
+  type: 'html';
+  safe_html: string;
+}
+export interface EmbedBlock {
+  type: 'embed';
+  raw_html: string;
+}
+export type PageBlock =
+  | HeadingBlock
+  | ParagraphBlock
+  | ImageBlock
+  | ButtonBlock
+  | DividerBlock
+  | HtmlBlock
+  | EmbedBlock;
+
+export interface PublicPage {
+  slug: string;
+  title: string;
+  blocks: PageBlock[];
+  css: string;
+  scope_id: string | number;
+  published_at: string | null;
+}
+
+export interface SiteNavItem {
+  slug: string;
+  title: string;
+}
+
+// A not-published / missing page 404s — surfaced as null so the route can call
+// notFound(); any other failure throws so the route can degrade gracefully.
+export async function getPublicPage(slug: string): Promise<PublicPage | null> {
+  const res = await fetch(
+    `${apiBase()}/public/pages/${encodeURIComponent(slug)}`,
+    { cache: 'no-store', headers: { accept: 'application/json' } },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApiError(res.status, await parseError(res));
+  return (await res.json()) as PublicPage;
+}
+
+export async function getSiteNav(): Promise<SiteNavItem[]> {
+  const res = await fetch(`${apiBase()}/public/site-nav`, {
+    cache: 'no-store',
+    headers: { accept: 'application/json' },
+  });
+  if (!res.ok) throw new ApiError(res.status, await parseError(res));
+  return (await res.json()) as SiteNavItem[];
+}

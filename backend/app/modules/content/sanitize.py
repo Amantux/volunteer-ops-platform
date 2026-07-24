@@ -58,6 +58,10 @@ _CSS_FORBIDDEN = re.compile(
 # url(...) whose target is not http(s)/relative — blocks url(javascript:), url(data:...script).
 _CSS_BAD_URL = re.compile(r"url\(\s*['\"]?\s*(?:javascript|vbscript|data)\s*:", re.IGNORECASE)
 _CSS_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+# `position: fixed|sticky` lets a page's own (scoped) container escape normal flow and cover the
+# whole viewport — a CSS-only defacement / clickjacking surface. Strip those declarations; the
+# rest of the author's CSS still applies.
+_CSS_STRIP_DECL = re.compile(r"position\s*:\s*(?:fixed|sticky)\s*(?:!important)?\s*;?", re.IGNORECASE)
 
 
 def _scope_selector(selector: str, scope: str) -> str:
@@ -87,6 +91,7 @@ def sanitize_css(raw: str, *, scope_id: str) -> str:
     css = _CSS_COMMENT.sub("", raw)
     if _CSS_FORBIDDEN.search(css) or _CSS_BAD_URL.search(css):
         return ""  # fail safe — reject the whole stylesheet
+    css = _CSS_STRIP_DECL.sub("", css)
     scope = f"#page-{scope_id}"
     return _scope_block(css, scope).strip()
 

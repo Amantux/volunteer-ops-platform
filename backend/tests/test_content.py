@@ -64,6 +64,19 @@ def test_sanitize_css_scopes_selectors():
     assert "body {" not in out  # body rewritten to the scope root
 
 
+def test_sanitize_css_strips_viewport_overlay_position():
+    # position:fixed/sticky would let a scoped page cover the whole viewport (defacement).
+    out = sanitize_css(":root { position: fixed; inset: 0; background: red }", scope_id="1")
+    assert "fixed" not in out.lower() and "inset: 0" in out
+
+
+def test_page_title_is_plain_text(client, admin_headers):
+    pid = client.post("/api/admin/pages", headers=admin_headers,
+                      json={"slug": "titletest", "title": "<b>Bold</b> & bright"}).json()["id"]
+    page = client.get(f"/api/admin/pages/{pid}", headers=admin_headers).json()
+    assert page["title"] == "Bold & bright"  # markup stripped, entities decoded (no double-escape)
+
+
 # --- Page lifecycle + public serving ---------------------------------------- #
 
 def test_create_edit_publish_and_public_serving(client, admin_headers):

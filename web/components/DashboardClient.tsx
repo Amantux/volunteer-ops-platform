@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ApiError, clearToken, getMe, getToken, type Me } from '@/lib/auth';
@@ -99,9 +100,14 @@ export default function DashboardClient() {
           <h1>Welcome back, {me.name}</h1>
           <p className="muted">{me.email}</p>
         </div>
-        <button type="button" className="btn btn-secondary" onClick={signOut}>
-          Sign out
-        </button>
+        <div className="cms-actions">
+          <Link className="btn btn-secondary" href="/admin/site">
+            Manage site
+          </Link>
+          <button type="button" className="btn btn-secondary" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
       </div>
 
       {!volunteer && !coordinator && (

@@ -2,9 +2,10 @@
 // The opaque session token is the ONLY thing we persist (localStorage); no
 // passwords or personal data are stored client-side.
 
-import { ApiError, apiBase, parseError } from '@/lib/api';
+import { ApiError, apiBase, parseError, type PageBlock } from '@/lib/api';
 
 export { ApiError };
+export type { PageBlock };
 
 const TOKEN_KEY = 'vop_session';
 
@@ -238,5 +239,76 @@ export async function logHours(signupId: number, hours: number): Promise<void> {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ signup_id: signupId, hours }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// CMS site builder (admin)
+// ---------------------------------------------------------------------------
+export interface AdminPage {
+  id: number;
+  slug: string;
+  title: string;
+  status: string;
+  blocks: PageBlock[];
+  custom_css: string;
+  show_in_nav: boolean;
+  nav_order: number;
+  is_home: boolean;
+  published_at: string | null;
+  updated_at: string | null;
+}
+
+// Outgoing PATCH shape. `blocks` carries the editor's payload blocks — html /
+// embed content is sent under key `html`; the server re-sanitizes and returns
+// `safe_html` / `raw_html`. Typed loosely (unknown[]) for that asymmetry.
+export interface PagePatch {
+  title?: string;
+  blocks?: unknown[];
+  custom_css?: string;
+  show_in_nav?: boolean;
+  nav_order?: number;
+}
+
+export function listPages(): Promise<AdminPage[]> {
+  return authGet<AdminPage[]>('/admin/pages');
+}
+
+export function getPage(id: number): Promise<AdminPage> {
+  return authGet<AdminPage>(`/admin/pages/${id}`);
+}
+
+export function createPage(input: {
+  slug: string;
+  title: string;
+}): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/admin/pages', input);
+}
+
+export async function updatePage(
+  id: number,
+  patch: PagePatch,
+): Promise<AdminPage> {
+  const res = await authFetch(`/admin/pages/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  return (await res.json()) as AdminPage;
+}
+
+export function publishPage(id: number): Promise<AdminPage> {
+  return authPost<AdminPage>(`/admin/pages/${id}/publish`);
+}
+
+export function unpublishPage(id: number): Promise<AdminPage> {
+  return authPost<AdminPage>(`/admin/pages/${id}/unpublish`);
+}
+
+export function assistCopy(
+  prompt: string,
+): Promise<{ text: string; provider: string }> {
+  return authPost<{ text: string; provider: string }>('/admin/pages/assist', {
+    prompt,
   });
 }

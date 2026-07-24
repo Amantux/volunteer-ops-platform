@@ -8,8 +8,10 @@ publishing freezes a sanitized snapshot into `published_*`.
 
 from __future__ import annotations
 
+import html as _htmllib
 from datetime import datetime
 
+import nh3
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -44,8 +46,14 @@ def _safe_url(url: str) -> str:
 
 
 def _plain(text: str, limit: int = 500) -> str:
-    """Strip all markup from a field that must be plain text (heading text, button label)."""
-    return sanitize_html(str(text or ""))[:limit] if text else ""
+    """Return plain text for a field that must not contain markup (heading, button label, title).
+
+    Strips all tags, then decodes entities so React (which escapes once on render) shows the true
+    characters — nh3 alone would leave `&` double-encoded.
+    """
+    if not text:
+        return ""
+    return _htmllib.unescape(nh3.clean(str(text), tags=set(), attributes={}))[:limit]
 
 
 def uses_privileged(blocks: list, custom_css: str) -> bool:
@@ -103,7 +111,7 @@ def create_page(db: Session, *, org_id: int, slug: str, title: str,
         raise ContentError(f"invalid or reserved slug: {slug!r}")
     if db.scalar(select(Page).where(Page.org_id == org_id, Page.slug == slug)) is not None:
         raise ContentError("a page with that slug already exists")
-    page = Page(org_id=org_id, slug=slug, title=title.strip()[:200] or slug,
+    page = Page(org_id=org_id, slug=slug, title=_plain(title, 200) or slug,
                 updated_by_user_id=actor_user_id)
     db.add(page)
     db.flush()
@@ -116,7 +124,7 @@ def update_page(db: Session, *, org_id: int, page_id: int, actor_user_id: int,
                 nav_order: int | None = None) -> Page:
     page = _get(db, org_id, page_id)
     if title is not None:
-        page.title = title.strip()[:200] or page.slug
+        page.title = _plain(title, 200) or page.slug
     if blocks is not None:
         page.blocks = sanitize_blocks(blocks)
     if custom_css is not None:
@@ -153,6 +161,7 @@ def unpublish_page(db: Session, *, org_id: int, page_id: int, actor_user_id: int
     page = _get(db, org_id, page_id)
     page.status = PageStatus.draft
     page.published_blocks = None
+    page.published_css = ""
     page.published_at = None
     db.flush()
     audit.emit(db, org_id=org_id, action="content.unpublish_page", actor_id=actor_user_id,

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import AuthNav from '@/components/AuthNav';
+import { getSiteNav, type SiteNavItem } from '@/lib/api';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -17,7 +18,20 @@ export const viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  // Published CMS pages that opted into the menu. Resilient: if the site-nav
+  // fetch fails, fall back to just the built-in links.
+  let cmsNav: SiteNavItem[] = [];
+  try {
+    cmsNav = await getSiteNav();
+  } catch {
+    cmsNav = [];
+  }
+
   return (
     <html lang="en">
       <body>
@@ -38,6 +52,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/trainings">Trainings</Link>
               <Link href="/calendar">Calendar</Link>
               <Link href="/about">About</Link>
+              {cmsNav.map((item) => (
+                <Link key={item.slug} href={`/${item.slug}`}>
+                  {item.title}
+                </Link>
+              ))}
               <AuthNav />
             </nav>
           </div>
