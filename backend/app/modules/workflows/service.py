@@ -78,7 +78,13 @@ def start_instance(db: Session, *, org_id: int, definition_key: str, subject_typ
 
 
 def _get_instance(db: Session, org_id: int, instance_id: int) -> WorkflowInstance:
-    inst = db.get(WorkflowInstance, instance_id)
+    # Lock the instance row on Postgres so two concurrent (different) transitions from the same
+    # state can't both commit and violate the state machine. No-op on SQLite (serial tests).
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        inst = db.scalar(select(WorkflowInstance).where(WorkflowInstance.id == instance_id)
+                         .with_for_update())
+    else:
+        inst = db.get(WorkflowInstance, instance_id)
     if inst is None or inst.org_id != org_id:
         raise WorkflowError("workflow instance not found")
     return inst
@@ -92,6 +98,10 @@ def _find_transition(definition: WorkflowDefinition, from_state: str, name: str)
 
 
 def _authorize(db: Session, principal: Principal, transition: dict, program_id: int | None) -> None:
+    # NOTE (v1 limitation): callers don't yet resolve a subject's program, so a `scope: "program"`
+    # transition with program_id=None is satisfiable only by an org-wide grant holder — fail-safe
+    # (never over-grants) but a program-scoped coordinator is denied. Deriving program from the
+    # subject (e.g. a form answer) is a follow-up. The seeded incident workflow uses org scope.
     perm = transition.get("permission")
     if not perm:
         return  # unguarded transition (e.g. a public submit-driven start)
@@ -152,11 +162,15 @@ def perform_transition(db: Session, principal: Principal, *, instance_id: int,
     if not _guard_ok(transition, context or {}):
         raise WorkflowError("transition guard not satisfied")
 
+    approved = None
     if transition.get("requires_approval"):
+        # An approval must be approved AND not yet consumed — a single approval authorizes exactly
+        # one execution of the gated transition (matters for cyclic workflows).
         approved = db.scalar(select(ApprovalRequest).where(
             ApprovalRequest.workflow_instance_id == inst.id,
             ApprovalRequest.transition_name == transition_name,
-            ApprovalRequest.status == ApprovalStatus.approved))
+            ApprovalRequest.status == ApprovalStatus.approved,
+            ApprovalRequest.consumed_at.is_(None)))
         if approved is None:
             existing = db.scalar(select(ApprovalRequest).where(
                 ApprovalRequest.workflow_instance_id == inst.id,
@@ -192,6 +206,8 @@ def perform_transition(db: Session, principal: Principal, *, instance_id: int,
     inst.deadline_at = _deadline_for(definition, to_state)
     if _state(definition, to_state).get("is_terminal"):
         inst.status = InstanceStatus.closed
+    if approved is not None:
+        approved.consumed_at = utcnow()  # spend the approval — not reusable on a later pass
     _run_actions(db, definition, transition.get("entry_actions", []), inst)
     audit.emit(db, org_id=inst.org_id, action="workflow.transition",
                actor_id=principal.user_id, target_type="workflow_instance", target_id=inst.id,

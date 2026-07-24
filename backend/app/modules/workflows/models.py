@@ -108,3 +108,6 @@ class ApprovalRequest(Base, TimestampMixin):
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime)
     decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Set once the approval has authorized its transition, so a single approval can't re-authorize
+    # the same gated transition on a later pass through a cyclic workflow.
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime)

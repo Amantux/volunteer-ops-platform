@@ -124,9 +124,10 @@ def create_workflow(payload: WorkflowIn, db: Session = Depends(get_db),
 @public.get("/forms/{key}")
 def get_form(key: str, db: Session = Depends(get_db),
              org: Organization = Depends(get_public_org)):
-    """The published, submitter-facing schema (internal reviewer-only fields are never included)."""
+    """The published, submitter-facing schema. This route is UNAUTHENTICATED, so the caller is
+    `public` — a volunteer-tier field is not rendered here (a volunteer form needs an authed path)."""
     try:
-        return forms.get_form_for_submission(db, org_id=org.id, key=key, caller=Visibility.volunteer)
+        return forms.get_form_for_submission(db, org_id=org.id, key=key, caller=Visibility.public)
     except FormError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -140,7 +141,10 @@ def submit_form(key: str, payload: SubmitIn, request: Request, db: Session = Dep
     if not botcheck.verify(payload.bot_token, remote_ip=client):
         raise HTTPException(status_code=400, detail="Bot check failed. Please try again.")
     try:
-        sub = forms.submit(db, org_id=org.id, key=key, answers=payload.answers)
+        # Unauthenticated route → the submitter is `public`; a volunteer/internal field can't be
+        # written here even if its key is POSTed directly.
+        sub = forms.submit(db, org_id=org.id, key=key, answers=payload.answers,
+                           caller=Visibility.public)
     except FormError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     db.commit()

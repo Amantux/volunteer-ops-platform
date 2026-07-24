@@ -191,6 +191,58 @@ def test_publishing_a_new_version_does_not_change_past_submissions(client, db, o
     assert [f["key"] for f in snap1["fields"]] == ["rating"]
 
 
+def test_public_route_uses_public_visibility_not_volunteer(client, db, org, admin_headers):
+    # A volunteer-tier field must not be rendered to, or writable by, an anonymous public caller.
+    did = client.post("/api/admin/forms", headers=admin_headers,
+                      json={"key": "vistest", "name": "Vis", "default_visibility": "public"}
+                      ).json()["id"]
+    client.post(f"/api/admin/forms/{did}/versions", headers=admin_headers,
+                json={"schema": {"fields": [
+                    {"key": "pub", "type": "text", "label": "P", "visibility": "public"},
+                    {"key": "vol", "type": "text", "label": "V", "visibility": "volunteer"}]}})
+    client.post(f"/api/admin/forms/{did}/versions/1/publish", headers=admin_headers)
+
+    schema = client.get("/api/forms/vistest").json()["schema"]
+    assert {f["key"] for f in schema["fields"]} == {"pub"}  # volunteer field not rendered
+    sid = client.post("/api/forms/vistest/submissions",
+                      json={"answers": {"pub": "a", "vol": "leaked"}}).json()["id"]
+    assert "vol" not in db.get(FormSubmission, sid).answers  # not writable by the public
+
+
+def test_approval_is_consumed_and_not_reusable_in_a_cycle(db, org, admin_user):
+    # A single approval authorizes exactly ONE execution of a gated transition, even if the
+    # instance loops back to the transition's from-state.
+    from app.modules.workflows.models import WorkflowDefinition
+    wd = WorkflowDefinition(
+        org_id=org.id, key="cyc", name="Cyclic", subject_type="test", initial_state="a",
+        states=[{"name": "a"}, {"name": "b"}],
+        transitions=[{"name": "go", "from": "a", "to": "b", "permission": "incident.close",
+                      "requires_approval": True},
+                     {"name": "back", "from": "b", "to": "a", "permission": "incident.close"}])
+    db.add(wd)
+    db.commit()
+    principal = Principal(user_id=admin_user.id, org_id=org.id)
+    inst = workflows.start_instance(db, org_id=org.id, definition_key="cyc",
+                                    subject_type="test", subject_id=1)
+    db.commit()
+    # First pass: go requires approval → creates a request; decide it → lands in b.
+    workflows.perform_transition(db, principal, instance_id=inst.id, transition_name="go")
+    ar = db.scalar(select(ApprovalRequest).where(ApprovalRequest.workflow_instance_id == inst.id))
+    workflows.decide_approval(db, principal, approval_id=ar.id, approve=True)
+    db.commit()
+    assert db.get(WorkflowInstance, inst.id).current_state == "b"
+
+    # Loop back, then try `go` again with NO new approval — the consumed one must NOT authorize it.
+    workflows.perform_transition(db, principal, instance_id=inst.id, transition_name="back")
+    workflows.perform_transition(db, principal, instance_id=inst.id, transition_name="go")
+    db.commit()
+    assert db.get(WorkflowInstance, inst.id).current_state == "a"  # blocked — awaiting a new approval
+    pending = db.scalar(select(func.count()).select_from(ApprovalRequest).where(
+        ApprovalRequest.workflow_instance_id == inst.id,
+        ApprovalRequest.status == ApprovalStatus.pending))
+    assert pending == 1  # a fresh approval request was created, the old one wasn't reused
+
+
 def test_deadline_sweep_is_idempotent(client, db):
     from datetime import timedelta
 
