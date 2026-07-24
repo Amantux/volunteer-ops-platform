@@ -18,6 +18,11 @@ from app.modules.content.models import (  # noqa: F401
     Page,
     PageRevision,
 )
+from app.modules.forms.models import (  # noqa: F401
+    FormDefinition,
+    FormSubmission,
+    FormVersion,
+)
 from app.modules.identity.models import (  # noqa: F401
     Person,
     Role,
@@ -52,4 +57,10 @@ from app.modules.training.models import (  # noqa: F401
     Course,
     TrainingRegistration,
     TrainingSession,
+)
+from app.modules.workflows.models import (  # noqa: F401
+    ApprovalRequest,
+    WorkflowDefinition,
+    WorkflowInstance,
+    WorkflowTransitionEvent,
 )

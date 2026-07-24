@@ -29,6 +29,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "comms.manage", "comms.approve", "audit.view",
         "site.edit", "site.develop", "site.publish",
         "social.draft", "social.manage", "social.approve", "social.publish",
+        "forms.admin", "forms.review", "workflows.admin", "incident.triage", "incident.close",
     ],
     "trainer": [
         "training.manage_session", "training.record_attendance", "training.record_completion",
@@ -49,6 +50,9 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "social_manager": [
         "social.draft", "social.manage", "social.approve", "social.publish",
+    ],
+    "operations_coordinator": [
+        "forms.review", "incident.triage", "incident.close",
     ],
 }
 
@@ -99,6 +103,7 @@ def seed_bootstrap(db: Session) -> Organization:
     _seed_demo_opportunity(db, org.id)
     _seed_pages(db, org.id)
     _seed_social(db, org.id)
+    _seed_forms(db, org.id)
     db.commit()
     return org
 
@@ -265,4 +270,63 @@ def _seed_social(db: Session, org_id: int) -> None:
         return
     db.add(SocialChannel(org_id=org_id, platform=Platform.manual, handle="@riverside",
                          display_name="Riverside (manual)", char_limit=280))
+    db.flush()
+
+
+def _seed_forms(db: Session, org_id: int) -> None:
+    """Seed the incident-report process as CONFIG — a FormDefinition + a WorkflowDefinition — to
+    demonstrate that a new operational process is data, not code."""
+    from app.modules.forms.models import FormDefinition
+    from app.modules.forms.service import create_definition, create_draft_version, publish_version
+    from app.modules.workflows.models import WorkflowDefinition
+
+    if db.scalar(select(func.count()).select_from(FormDefinition).where(
+            FormDefinition.org_id == org_id)):
+        return
+
+    # The state machine (every arrow is one row of JSON, no code).
+    db.add(WorkflowDefinition(
+        org_id=org_id, key="incident_report", name="Incident report", subject_type="form_submission",
+        initial_state="reported",
+        states=[{"name": "reported", "sla_hours": 48}, {"name": "needs_triage"},
+                {"name": "in_progress"}, {"name": "resolved", "is_terminal": True},
+                {"name": "rejected", "is_terminal": True}],
+        transitions=[
+            {"name": "triage", "from": "reported", "to": "needs_triage",
+             "permission": "incident.triage", "entry_actions": [{"emit_audit": "incident.triaged"}]},
+            {"name": "start", "from": "needs_triage", "to": "in_progress",
+             "permission": "incident.triage"},
+            {"name": "reject", "from": "needs_triage", "to": "rejected",
+             "permission": "incident.triage"},
+            {"name": "resolve", "from": "in_progress", "to": "resolved",
+             "permission": "incident.close", "requires_approval": True,
+             "action": "work.close",  # R3 — an agent could never execute this
+             "entry_actions": [{"emit_audit": "incident.resolved"},
+                               {"notify": "incident resolved"}]},
+        ]))
+    db.flush()
+
+    definition = create_definition(
+        db, org_id=org_id, key="incident_report", name="Report an issue",
+        purpose="Report a safety concern, facility problem, or other issue.",
+        default_visibility="public", workflow_key="incident_report")
+    schema = {"fields": [
+        {"key": "category", "type": "select", "label": "What kind of issue?",
+         "options": ["safety", "facility", "equipment", "other"], "visibility": "public",
+         "validation": {"required": True}},
+        {"key": "description", "type": "text", "label": "Describe what happened",
+         "visibility": "public", "validation": {"required": True}},
+        {"key": "is_injury", "type": "boolean", "label": "Did anyone get hurt?",
+         "visibility": "public", "validation": {"required": False}},
+        {"key": "reporter_contact", "type": "text", "label": "Your email (optional)",
+         "visibility": "public", "validation": {"required": False}},
+        # Reviewer-only fields — never shown to or writable by the public reporter.
+        {"key": "severity", "type": "select", "label": "Severity",
+         "options": ["low", "medium", "high", "critical"], "visibility": "internal",
+         "validation": {"required": False}},
+        {"key": "internal_notes", "type": "text", "label": "Internal notes",
+         "visibility": "internal", "validation": {"required": False}},
+    ]}
+    fv = create_draft_version(db, org_id=org_id, def_id=definition.id, schema=schema)
+    publish_version(db, org_id=org_id, def_id=definition.id, version=fv.version, actor_user_id=None)
     db.flush()

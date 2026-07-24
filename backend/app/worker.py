@@ -10,6 +10,7 @@ from celery import Celery
 
 import app.modules.communications.service  # noqa: F401  (registers the outbox email handler)
 import app.modules.social.service  # noqa: F401  (registers the "social.publish" handler)
+import app.modules.workflows.service  # noqa: F401  (registers the "workflow.notify" handler)
 from app.core.config import settings
 from app.core.db import SessionLocal
 
@@ -19,6 +20,7 @@ celery_app.conf.beat_schedule = {
     "expire-holds": {"task": "app.worker.expire_holds", "schedule": 300.0},
     "send-due-campaigns": {"task": "app.worker.send_due_campaigns", "schedule": 60.0},
     "publish-due-social": {"task": "app.worker.publish_due_social", "schedule": 60.0},
+    "sweep-workflow-deadlines": {"task": "app.worker.sweep_workflow_deadlines", "schedule": 300.0},
 }
 celery_app.conf.timezone = "UTC"
 
@@ -56,3 +58,14 @@ def publish_due_social() -> int:
 
     with SessionLocal() as db:
         return publish_due_social_posts(db)
+
+
+@celery_app.task(name="app.worker.sweep_workflow_deadlines")
+def sweep_workflow_deadlines() -> int:
+    """Escalate workflow instances past their SLA deadline."""
+    from app.modules.workflows.service import sweep_deadlines
+
+    with SessionLocal() as db:
+        n = sweep_deadlines(db)
+        db.commit()
+        return n

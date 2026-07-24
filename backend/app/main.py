@@ -7,7 +7,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, comms, content, ops, public, scheduling, social, trainer
+from app.api import (
+    admin,
+    auth,
+    comms,
+    content,
+    forms,
+    ops,
+    public,
+    scheduling,
+    social,
+    trainer,
+)
 from app.core.config import settings
 from app.core.db import SessionLocal, init_db
 from app.modules.communications import service as _comms  # noqa: F401  (registers outbox handler)
@@ -59,10 +70,13 @@ app.include_router(comms.router)
 app.include_router(content.admin_router)
 app.include_router(content.public_router)
 app.include_router(social.router)
+app.include_router(forms.admin)
+app.include_router(forms.public)
 app.include_router(ops.router)
 
-# Import the social service so its "social.publish" outbox handler registers at startup.
+# Import the social + workflows services so their outbox handlers register at startup.
 from app.modules.social import service as _social_service  # noqa: E402,F401
+from app.modules.workflows import service as _workflows_service  # noqa: E402,F401
 
 
 @app.get("/api/health")
