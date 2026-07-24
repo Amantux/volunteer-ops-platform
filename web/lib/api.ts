@@ -261,3 +261,86 @@ export async function getSiteNav(): Promise<SiteNavItem[]> {
   if (!res.ok) throw new ApiError(res.status, await parseError(res));
   return (await res.json()) as SiteNavItem[];
 }
+
+// ---------------------------------------------------------------------------
+// Forms / workflow engine — public (submitter-facing) surface. Only
+// submitter-facing fields come back from the server; internal fields are
+// excluded server-side. The server is the authority on validation — the
+// client mirrors `required` / `show_if` for UX only.
+// ---------------------------------------------------------------------------
+export type FormFieldType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'select'
+  | 'multiselect'
+  | 'boolean'
+  | 'file';
+
+// An option is either a bare value or a {value, label} pair.
+export type FormFieldOption = string | { value: string; label: string };
+
+export interface FormFieldValidation {
+  required?: boolean;
+  required_if?: { field: string; eq: unknown };
+  regex?: string;
+  min?: number;
+  max?: number;
+}
+
+export interface FormFieldCondition {
+  field: string;
+  eq: unknown;
+}
+
+export interface FormField {
+  key: string;
+  type: FormFieldType;
+  label: string;
+  options?: FormFieldOption[];
+  visibility: string;
+  validation: FormFieldValidation;
+  show_if?: FormFieldCondition;
+}
+
+export interface FormSchema {
+  fields: FormField[];
+}
+
+export interface PublicForm {
+  key: string;
+  name: string;
+  purpose: string;
+  schema: FormSchema;
+}
+
+// A missing / unpublished form key 404s — surfaced as null so the route can
+// call notFound(); any other failure throws so the route can degrade.
+export async function getForm(key: string): Promise<PublicForm | null> {
+  const res = await fetch(`${apiBase()}/forms/${encodeURIComponent(key)}`, {
+    cache: 'no-store',
+    headers: { accept: 'application/json' },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApiError(res.status, await parseError(res));
+  return (await res.json()) as PublicForm;
+}
+
+export async function submitForm(
+  key: string,
+  answers: Record<string, unknown>,
+): Promise<{ id: number }> {
+  const res = await fetch(
+    `${apiBase()}/forms/${encodeURIComponent(key)}/submissions`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({ answers }),
+    },
+  );
+  if (!res.ok) throw new ApiError(res.status, await parseError(res));
+  return (await res.json()) as { id: number };
+}

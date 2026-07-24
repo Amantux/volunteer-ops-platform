@@ -422,3 +422,73 @@ export function schedulePost(
 export function publishPost(id: number): Promise<SocialPost> {
   return authPost<SocialPost>(`/social/posts/${id}/publish`);
 }
+
+// ---------------------------------------------------------------------------
+// Forms / workflow engine (reviewer) — requires `forms.review`. A reviewer
+// sees the full answer set (internal fields included) and drives the workflow
+// instance through its allowed transitions.
+// ---------------------------------------------------------------------------
+export interface FormSubmission {
+  id: number;
+  status: string;
+  answers: Record<string, unknown>;
+  workflow_instance_id: number | null;
+}
+
+export interface WorkflowTransition {
+  name: string;
+  to: string;
+  requires_approval: boolean;
+}
+
+export interface WorkflowInstance {
+  id: number;
+  current_state: string;
+  status: string;
+  deadline_at: string | null;
+  allowed_transitions: WorkflowTransition[];
+}
+
+// A transition returns only the moved instance's head fields.
+export interface TransitionResult {
+  id: number;
+  current_state: string;
+  status: string;
+}
+
+export function listSubmissions(key: string): Promise<FormSubmission[]> {
+  return authGet<FormSubmission[]>(
+    `/submissions?key=${encodeURIComponent(key)}`,
+  );
+}
+
+export function getSubmission(id: number): Promise<FormSubmission> {
+  return authGet<FormSubmission>(`/submissions/${id}`);
+}
+
+export function getInstance(id: number): Promise<WorkflowInstance> {
+  return authGet<WorkflowInstance>(`/instances/${id}`);
+}
+
+// Invoke a workflow transition. The Idempotency-Key makes a retry of the *same*
+// intended action safe (the server dedupes on it); pass a value that is stable
+// per (instance, transition), e.g. `${instanceId}:${name}`.
+export async function runTransition(
+  instanceId: number,
+  name: string,
+  note: string,
+  idempotencyKey: string,
+): Promise<TransitionResult> {
+  const res = await authFetch(
+    `/instances/${instanceId}/transitions/${encodeURIComponent(name)}`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({ note }),
+    },
+  );
+  return (await res.json()) as TransitionResult;
+}
