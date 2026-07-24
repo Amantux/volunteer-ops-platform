@@ -312,3 +312,113 @@ export function assistCopy(
     prompt,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Social media (admin) — human-approved publishing workflow.
+// Lifecycle: draft → (submit) → pending_approval → (approve) → approved →
+// (schedule / publish) → published. failed / partially_published can be
+// re-published to retry the failed channels. Nothing here auto-publishes.
+// ---------------------------------------------------------------------------
+export type SocialPostStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'approved'
+  | 'scheduled'
+  | 'publishing'
+  | 'published'
+  | 'partially_published'
+  | 'failed';
+
+export interface SocialChannel {
+  id: number;
+  platform: string;
+  handle: string;
+  display_name: string;
+  enabled: boolean;
+  char_limit: number;
+}
+
+export interface SocialTarget {
+  channel_id: number;
+  status: string;
+  external_ref: string | null;
+  error: string | null;
+}
+
+export interface SocialPost {
+  id: number;
+  body: string;
+  status: SocialPostStatus;
+  source: string;
+  scheduled_at: string | null;
+  published_at: string | null;
+  approved: boolean;
+  draft_provider: string | null;
+  targets: SocialTarget[];
+}
+
+export function listChannels(): Promise<SocialChannel[]> {
+  return authGet<SocialChannel[]>('/social/channels');
+}
+
+export function createChannel(input: {
+  platform?: string;
+  handle: string;
+  display_name?: string;
+  char_limit?: number;
+}): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/social/channels', {
+    platform: 'manual',
+    ...input,
+  });
+}
+
+export function listPosts(): Promise<SocialPost[]> {
+  return authGet<SocialPost[]>('/social/posts');
+}
+
+export function getPost(id: number): Promise<SocialPost> {
+  return authGet<SocialPost>(`/social/posts/${id}`);
+}
+
+export function createPost(input: {
+  body: string;
+  channel_ids: number[];
+  use_ai: boolean;
+  prompt: string;
+}): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/social/posts', input);
+}
+
+export async function updatePost(
+  id: number,
+  patch: { body?: string; channel_ids?: number[] },
+): Promise<SocialPost> {
+  const res = await authFetch(`/social/posts/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  return (await res.json()) as SocialPost;
+}
+
+export function submitPost(id: number): Promise<SocialPost> {
+  return authPost<SocialPost>(`/social/posts/${id}/submit`);
+}
+
+export function approvePost(id: number): Promise<SocialPost> {
+  return authPost<SocialPost>(`/social/posts/${id}/approve`);
+}
+
+export function schedulePost(
+  id: number,
+  scheduledAt: string,
+): Promise<SocialPost> {
+  return authPost<SocialPost>(`/social/posts/${id}/schedule`, {
+    scheduled_at: scheduledAt,
+  });
+}
+
+export function publishPost(id: number): Promise<SocialPost> {
+  return authPost<SocialPost>(`/social/posts/${id}/publish`);
+}

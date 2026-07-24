@@ -1216,6 +1216,89 @@ main {
   border-radius: var(--radius);
 }
 
+/* Social media (admin) -------------------------------------------------- */
+/* Failed-state pill reuses the shared .pill base + danger tokens. */
+.pill-danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+/* Live character count under the composer body. */
+.social-charcount {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  margin: var(--space-2) 0 0;
+}
+.social-charcount-over {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* Channel multi-select (mirrors .cms-settings). */
+.social-channels {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin: 0 0 var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+}
+.social-channels legend {
+  font-weight: 600;
+  padding: 0 var(--space-2);
+}
+
+/* AI-assisted badge — deliberately muted (no accent) so teal stays scarce. */
+.social-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.social-post-body {
+  white-space: pre-wrap;
+  margin: var(--space-3) 0 0;
+}
+
+.social-targets {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.social-target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: baseline;
+  font-size: 0.95rem;
+}
+.social-target-error {
+  color: var(--danger);
+  width: 100%;
+}
+
+.social-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.social-schedule {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-top: var(--space-3);
+}
+
 /* Responsive ------------------------------------------------------------ */
 @media (min-width: 900px) {
   .feature-grid {
