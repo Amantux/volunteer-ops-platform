@@ -209,29 +209,50 @@ def _seed_pages(db: Session, org_id: int) -> None:
     # Demo pages the builder owns, at slugs that don't collide with the app's built-in routes.
     # (The built-in about/faq/contact pages remain hardcoded; moving them into the builder is a
     # follow-up — see docs. These show the builder end-to-end and populate the public nav.)
+    faq_html = (
+        "<details><summary>Do I need experience?</summary><p>No. Most roles need no prior "
+        "experience, and we run free training for the ones that do.</p></details>"
+        "<details><summary>How do I sign up?</summary><p>Create an account, confirm your email, "
+        "and you can register for trainings and opportunities right away.</p></details>"
+        "<details><summary>What's the time commitment?</summary><p>Entirely up to you — some "
+        "volunteers help for an hour a month, others every week.</p></details>"
+        "<details><summary>Is there a minimum age?</summary><p>Most opportunities are open to "
+        "16+, and we have family-friendly events too.</p></details>"
+    )
     pages = [
-        ("our-story", "Our story", 1, [
-            {"type": "heading", "level": 1, "text": "Our story"},
-            para("Riverside Volunteers began with a handful of neighbours and a simple idea: "
-                 "that a community is strongest when everyone has a way to help. Today we train "
-                 "and mobilise hundreds of local volunteers across food security, emergency "
-                 "response, and everyday care."),
+        ("about", "About us", 1, True, [
+            {"type": "heading", "level": 1, "text": "About Riverside Volunteers"},
+            para("We are a community nonprofit that connects willing hands with the work that "
+                 "keeps our neighbourhood strong. Our volunteers run food distributions, staff "
+                 "community events, and check in on neighbours who need a hand."),
             para("No experience is required to start — just a willingness to help. We provide "
                  "the training, the tools, and a welcoming team."),
             {"type": "button", "label": "Browse opportunities", "href": "/opportunities"},
         ]),
-        ("get-involved", "Get involved", 2, [
+        ("get-involved", "Get involved", 2, True, [
             {"type": "heading", "level": 1, "text": "Get involved"},
             para("There's a place for everyone here. Start with a free orientation, then pick "
                  "the opportunities that fit your schedule and interests."),
             {"type": "button", "label": "See upcoming trainings", "href": "/trainings"},
         ]),
+        # FAQ + Contact are editable and served at /faq /contact, linked from the footer
+        # (show_in_nav=False so they don't crowd the primary nav).
+        ("faq", "FAQ", 3, False, [
+            {"type": "heading", "level": 1, "text": "Frequently asked questions"},
+            {"type": "html", "safe_html": faq_html},
+        ]),
+        ("contact", "Contact", 4, False, [
+            {"type": "heading", "level": 1, "text": "Contact us"},
+            para("Questions? We'll get back to you within a couple of days."),
+            {"type": "button", "label": "Email hello@riverside-volunteers.org",
+             "href": "mailto:hello@riverside-volunteers.org"},
+        ]),
     ]
     now = utcnow()
-    for slug, title, order, blocks in pages:
+    for slug, title, order, in_nav, blocks in pages:
         db.add(Page(org_id=org_id, slug=slug, title=title, status=PageStatus.published,
                     blocks=blocks, published_blocks=blocks, published_css="", published_at=now,
-                    show_in_nav=True, nav_order=order))
+                    show_in_nav=in_nav, nav_order=order))
     db.flush()
 
 

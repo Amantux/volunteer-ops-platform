@@ -98,12 +98,16 @@ def test_create_edit_publish_and_public_serving(client, admin_headers):
 
 
 def test_seeded_pages_are_published_and_in_nav(client):
-    # The demo pages seeded at bootstrap serve publicly and populate the nav out of the box.
+    # The built-in pages seeded at bootstrap serve publicly and populate the nav out of the box.
     nav = client.get("/api/public/site-nav").json()
     slugs = {n["slug"] for n in nav}
-    assert {"our-story", "get-involved"} <= slugs
-    page = client.get("/api/public/pages/our-story").json()
-    assert page["title"] == "Our story" and page["blocks"]
+    assert {"about", "get-involved"} <= slugs  # in the primary nav
+    page = client.get("/api/public/pages/about").json()
+    assert page["title"] == "About us" and page["blocks"]
+    # FAQ/Contact are served (footer-linked) even though not in the primary nav.
+    faq = client.get("/api/public/pages/faq").json()
+    assert any("<details>" in b.get("safe_html", "") for b in faq["blocks"])  # accordions kept
+    assert client.get("/api/public/pages/contact").status_code == 200
 
 
 def test_reserved_slug_rejected(client, admin_headers):

@@ -30,37 +30,30 @@ test.describe('public content pages', () => {
     ).toBeVisible();
   });
 
-  test('about renders its h1', async ({ page }) => {
+  // About/FAQ/Contact are now CMS-managed pages served via /[slug]. Assert they render an h1
+  // (content is editable, so don't pin exact copy) plus the FAQ toggle and Contact mailto.
+  test('about (CMS) renders an h1', async ({ page }) => {
     await page.goto('/about');
-    await expect(
-      page.getByRole('heading', { level: 1, name: /neighbours, not strangers/i }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
-  test('faq renders its h1 and answers are keyboard-toggleable', async ({
+  test('faq (CMS) renders and answers are keyboard-toggleable', async ({
     page,
   }) => {
     await page.goto('/faq');
-    await expect(
-      page.getByRole('heading', {
-        level: 1,
-        name: /frequently asked questions/i,
-      }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     // Native <details> disclosure: focus the first summary and toggle it open.
-    const firstSummary = page.locator('.faq-item > summary').first();
+    const firstSummary = page.locator('details > summary').first();
     await firstSummary.focus();
     await expect(firstSummary).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page.locator('.faq-item').first()).toHaveAttribute('open', '');
+    await expect(page.locator('details').first()).toHaveAttribute('open', '');
   });
 
-  test('contact renders its h1 and a mailto CTA', async ({ page }) => {
+  test('contact (CMS) renders an h1 and a mailto CTA', async ({ page }) => {
     await page.goto('/contact');
-    await expect(
-      page.getByRole('heading', { level: 1, name: /get in touch/i }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(
       page.getByRole('link', {
         name: /email hello@riverside-volunteers\.org/i,

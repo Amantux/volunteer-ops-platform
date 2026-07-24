@@ -15,10 +15,10 @@ import nh3
 # Allowlisted tags for a custom-HTML block. No <script>, <style>, <iframe>, <object>, <embed>,
 # <form>, <link>, <meta> — nh3 drops everything not listed.
 _ALLOWED_TAGS: set[str] = {
-    "a", "abbr", "b", "blockquote", "br", "caption", "code", "col", "colgroup", "div",
-    "em", "figcaption", "figure", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img",
-    "li", "mark", "ol", "p", "pre", "section", "small", "span", "strong", "sub", "sup",
-    "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul",
+    "a", "abbr", "b", "blockquote", "br", "caption", "code", "col", "colgroup", "details",
+    "div", "em", "figcaption", "figure", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img",
+    "li", "mark", "ol", "p", "pre", "section", "small", "span", "strong", "sub", "summary",
+    "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul",
 }
 
 # Per-tag attribute allowlist. Notably NO `style` (styling goes through custom CSS, which is

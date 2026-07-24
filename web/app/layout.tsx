@@ -51,7 +51,7 @@ export default async function RootLayout({
               <Link href="/opportunities">Opportunities</Link>
               <Link href="/trainings">Trainings</Link>
               <Link href="/calendar">Calendar</Link>
-              <Link href="/about">About</Link>
+              {/* About and other built-in pages are now CMS-managed and appear via cmsNav. */}
               {cmsNav.map((item) => (
                 <Link key={item.slug} href={`/${item.slug}`}>
                   {item.title}

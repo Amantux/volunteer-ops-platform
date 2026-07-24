@@ -29,7 +29,7 @@ class ContentError(Exception):
 # Slugs that must not be taken by CMS pages: API + the app's static frontend routes.
 RESERVED_SLUGS: frozenset[str] = frozenset({
     "api", "admin", "login", "logout", "activate", "verify", "dashboard",
-    "opportunities", "calendar", "trainings", "about", "faq", "contact", "_next", "p",
+    "opportunities", "calendar", "trainings", "_next", "p",
 })
 
 _SAFE_TYPES = frozenset({"heading", "paragraph", "image", "button", "divider"})
