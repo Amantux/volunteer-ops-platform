@@ -38,6 +38,8 @@ class Event(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     org_id: Mapped[int] = mapped_column(ForeignKey("organization.id"), nullable=False, index=True)
+    # The program this event belongs to (authorization scope); null = org-level.
+    program_id: Mapped[int | None] = mapped_column(ForeignKey("program.id"))
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     kind: Mapped[str] = mapped_column(String(30), default="event", nullable=False)  # event|project|maintenance

@@ -39,8 +39,9 @@ class Eligibility:
 # --- Setup (coordinator) ---------------------------------------------------- #
 
 def create_event(db: Session, *, org_id: int, title: str, kind: str = "event",
-                 description: str = "") -> Event:
-    event = Event(org_id=org_id, title=title, kind=kind, description=description)
+                 description: str = "", program_id: int | None = None) -> Event:
+    event = Event(org_id=org_id, title=title, kind=kind, description=description,
+                  program_id=program_id)
     db.add(event)
     db.flush()
     return event

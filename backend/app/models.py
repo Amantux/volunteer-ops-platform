@@ -19,7 +19,11 @@ from app.modules.identity.models import (  # noqa: F401
     UserRoleAssignment,
     VerificationToken,
 )
-from app.modules.org.models import Organization, OrganizationSetting  # noqa: F401
+from app.modules.org.models import (  # noqa: F401
+    Organization,
+    OrganizationSetting,
+    Program,
+)
 from app.modules.people.models import (  # noqa: F401
     QualificationType,
     VolunteerProfile,

@@ -23,6 +23,18 @@ class Organization(Base, TimestampMixin):
     )
 
 
+class Program(Base, TimestampMixin):
+    """A program within an organization — the primary authorization scope below org."""
+
+    __tablename__ = "program"
+    __table_args__ = (UniqueConstraint("org_id", "key", name="uq_program_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organization.id"), nullable=False, index=True)
+    key: Mapped[str] = mapped_column(String(80), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+
+
 class OrganizationSetting(Base, TimestampMixin):
     """Typed key/value config: feature flags, terminology, scheduling/retention policy."""
 

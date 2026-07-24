@@ -9,13 +9,45 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.authz import Principal
+from app.core.authz import PermissionDenied, Principal, require_scoped
 from app.modules.people.service import profile_for_user
 from app.modules.scheduling import service
-from app.modules.scheduling.models import ShiftSignup, SignupStatus
+from app.modules.scheduling.models import Event, Shift, ShiftRole, ShiftSignup, SignupStatus
 from app.modules.scheduling.service import SchedulingError
 
 from .deps import current_principal, get_db, require_permission
+
+
+def _program_of_event(db: Session, org_id: int, event_id: int) -> int | None:
+    ev = db.get(Event, event_id)
+    if ev is None or ev.org_id != org_id:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return ev.program_id
+
+
+def _program_of_shift(db: Session, org_id: int, shift_id: int) -> int | None:
+    shift = db.get(Shift, shift_id)
+    if shift is None or shift.org_id != org_id:
+        raise HTTPException(status_code=404, detail="Shift not found")
+    return _program_of_event(db, org_id, shift.event_id)
+
+
+def _program_of_signup(db: Session, org_id: int, signup_id: int) -> int | None:
+    s = db.get(ShiftSignup, signup_id)
+    if s is None or s.org_id != org_id:
+        raise HTTPException(status_code=404, detail="Signup not found")
+    role = db.get(ShiftRole, s.shift_role_id)
+    assert role is not None
+    return _program_of_shift(db, org_id, role.shift_id)
+
+
+def _enforce_scope(db: Session, principal: Principal, permission: str,
+                   program_id: int | None) -> None:
+    """Fine-grained: the coordinator's role must be scoped to cover this program."""
+    try:
+        require_scoped(db, principal, permission, program_id=program_id)
+    except PermissionDenied as exc:
+        raise HTTPException(status_code=403, detail="Not permitted for this program") from exc
 
 router = APIRouter(prefix="/api", tags=["scheduling"])
 
@@ -26,6 +58,7 @@ class EventIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     kind: str = "event"
     description: str = ""
+    program_id: int | None = None
 
 
 class ShiftIn(BaseModel):
@@ -49,8 +82,10 @@ class IdOut(BaseModel):
 @router.post("/coordinator/events", response_model=IdOut, status_code=201)
 def create_event(payload: EventIn, db: Session = Depends(get_db),
                  principal: Principal = Depends(require_permission("shift.manage"))):
+    _enforce_scope(db, principal, "shift.manage", payload.program_id)
     ev = service.create_event(db, org_id=principal.org_id, title=payload.title,
-                              kind=payload.kind, description=payload.description)
+                              kind=payload.kind, description=payload.description,
+                              program_id=payload.program_id)
     db.commit()
     return IdOut(id=ev.id)
 
@@ -58,6 +93,8 @@ def create_event(payload: EventIn, db: Session = Depends(get_db),
 @router.post("/coordinator/shifts", response_model=IdOut, status_code=201)
 def create_shift(payload: ShiftIn, db: Session = Depends(get_db),
                  principal: Principal = Depends(require_permission("shift.manage"))):
+    _enforce_scope(db, principal, "shift.manage",
+                   _program_of_event(db, principal.org_id, payload.event_id))
     try:
         shift = service.create_shift(db, org_id=principal.org_id, event_id=payload.event_id,
                                      starts_at=payload.starts_at, ends_at=payload.ends_at,
@@ -71,6 +108,8 @@ def create_shift(payload: ShiftIn, db: Session = Depends(get_db),
 @router.post("/coordinator/roles", response_model=IdOut, status_code=201)
 def create_role(payload: RoleIn, db: Session = Depends(get_db),
                 principal: Principal = Depends(require_permission("shift.manage"))):
+    _enforce_scope(db, principal, "shift.manage",
+                   _program_of_shift(db, principal.org_id, payload.shift_id))
     role = service.add_role(db, org_id=principal.org_id, shift_id=payload.shift_id,
                             name=payload.name, capacity=payload.capacity,
                             required_qualification_type_id=payload.required_qualification_type_id)
@@ -96,6 +135,8 @@ class HoursIn(BaseModel):
 @router.post("/coordinator/checkin", response_model=IdOut)
 def checkin(payload: CheckinIn, db: Session = Depends(get_db),
             principal: Principal = Depends(require_permission("shift.record_attendance"))):
+    _enforce_scope(db, principal, "shift.record_attendance",
+                   _program_of_signup(db, principal.org_id, payload.signup_id))
     try:
         s = service.check_in(db, org_id=principal.org_id, signup_id=payload.signup_id,
                              actor_id=principal.user_id)
@@ -108,6 +149,8 @@ def checkin(payload: CheckinIn, db: Session = Depends(get_db),
 @router.post("/coordinator/hours", response_model=IdOut, status_code=201)
 def log_hours(payload: HoursIn, db: Session = Depends(get_db),
               principal: Principal = Depends(require_permission("shift.record_attendance"))):
+    _enforce_scope(db, principal, "shift.record_attendance",
+                   _program_of_signup(db, principal.org_id, payload.signup_id))
     try:
         entry = service.record_hours(db, org_id=principal.org_id, signup_id=payload.signup_id,
                                      hours=payload.hours, actor_id=principal.user_id)
