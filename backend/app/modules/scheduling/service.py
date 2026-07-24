@@ -91,7 +91,9 @@ def has_time_conflict(db: Session, *, org_id: int, profile_id: int, shift: Shift
         ShiftSignup.status.in_(ShiftRole.OCCUPYING),
     )).all()
     for s in signups:
-        other = db.get(ShiftRole, s.shift_role_id).shift
+        other_role = db.get(ShiftRole, s.shift_role_id)
+        assert other_role is not None
+        other = other_role.shift
         if other.id != shift.id and other.overlaps(shift):
             return True
     return False
@@ -163,6 +165,7 @@ def cancel_signup(db: Session, *, org_id: int, signup_id: int, actor_id) -> Shif
 def _promote_first_waitlisted(db: Session, *, org_id: int, role_id: int) -> None:
     """Deterministically promote the next waitlisted volunteer if a seat is free."""
     role = db.get(ShiftRole, role_id)
+    assert role is not None
     if _role_occupied(db, role_id) >= role.capacity:
         return
     candidate = db.scalar(select(ShiftSignup).where(

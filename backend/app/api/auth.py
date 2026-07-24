@@ -56,6 +56,7 @@ def _consume(db: Session, token: str) -> Person:
         raise HTTPException(status_code=400, detail="Invalid or expired link")
     row.used_at = utcnow()
     person = db.get(Person, row.person_id)
+    assert person is not None  # token FK guarantees the person exists
     db.flush()
     return person
 

@@ -110,6 +110,7 @@ def _seed_admin(db: Session, org_id: int) -> None:
         db.add(user)
         db.flush()
         role = db.scalar(select(Role).where(Role.org_id == org_id, Role.key == "org_admin"))
+        assert role is not None  # seeded just above
         db.add(UserRoleAssignment(org_id=org_id, user_id=user.id, role_id=role.id))
     db.flush()
 

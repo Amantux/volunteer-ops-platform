@@ -8,10 +8,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-import app.modules.communications.service  # noqa: F401  (registers the outbox email handler)
 from app.api import admin, auth, public, scheduling, trainer
 from app.core.config import settings
 from app.core.db import SessionLocal, init_db
+from app.modules.communications import service as _comms  # noqa: F401  (registers outbox handler)
 from app.seed import seed_bootstrap
 
 _INSECURE_SECRETS = {"dev-secret-change-me", "change-me-in-prod"}

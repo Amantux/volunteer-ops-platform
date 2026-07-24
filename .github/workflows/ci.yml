@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    name: backend (lint · type · test · migrations)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vop
+          POSTGRES_PASSWORD: vop
+          POSTGRES_DB: vop
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vop" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - name: Lint (ruff)
+        run: ruff check app tests
+      - name: Type-check (mypy)
+        run: mypy app
+      - name: Tests (pytest)
+        run: python -m pytest -q
+      - name: Migrations apply + no model drift
+        env:
+          VOP_DATABASE_URL: postgresql+psycopg://vop:vop@localhost:5432/vop
+        run: |
+          alembic upgrade head
+          alembic check   # fails if models diverge from the migration
+
+  frontend:
+    name: frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Build (tsc + next build)
+        run: npm run build
+
+  e2e:
+    name: e2e (Playwright + axe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install backend + start API (SQLite)
+        working-directory: backend
+        run: |
+          pip install -e '.[dev]'
+          VOP_DATABASE_URL="sqlite:////tmp/vop_ci.db" VOP_EMAIL_PROVIDER=console \
+            VOP_APP_SECRET=ci-secret \
+            nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 >/tmp/api.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/api/health && break; sleep 1; done
+      - name: Build web (bake proxy target) + install browsers
+        working-directory: web
+        run: |
+          npm ci
+          API_REWRITE_TARGET=http://127.0.0.1:8000 npm run build
+          npx playwright install --with-deps chromium
+      - name: Run Playwright + axe
+        working-directory: web
+        run: >-
+          API_INTERNAL_BASE=http://127.0.0.1:8000/api NEXT_PUBLIC_API_BASE=/api
+          npx playwright test --reporter=line

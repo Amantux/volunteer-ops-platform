@@ -40,6 +40,7 @@ def read_resource(db: Session, principal: Principal, uri: str) -> dict:
 @resource("vop://org-config", "Organization identity + timezone (org-scoped).")
 def _org_config(db: Session, principal: Principal) -> dict:
     org = db.get(Organization, principal.org_id)
+    assert org is not None
     return {"id": org.id, "name": org.name, "slug": org.slug, "timezone": org.timezone}
 
 

@@ -175,6 +175,7 @@ def verify_email(db: Session, *, token: str) -> TrainingRegistration | None:
         raise TrainingError("invalid or expired token")
     row.used_at = utcnow()
     person = db.get(Person, row.person_id)
+    assert person is not None  # token FK guarantees the person exists
     person.email_verified = True
 
     registration = db.get(TrainingRegistration, row.registration_id) if row.registration_id else None
@@ -286,11 +287,13 @@ def _execute_promotion(db: Session, proposal: AgentProposal, candidate: Training
                        *, actor_type: str, actor_id) -> None:
     # Defensive final seat check (auto-promote path calls this directly).
     session = db.get(TrainingSession, candidate.session_id)
+    assert session is not None
     if not _seats_available(db, session):
         raise TrainingError("no seat available")
     candidate.status = RegistrationStatus.confirmed
     candidate.waitlist_position = None
     person = db.get(Person, candidate.person_id)
+    assert person is not None
     proposal.result = {"promoted_registration_id": candidate.id}
     audit.emit(db, org_id=candidate.org_id, action="training.waitlist_promote",
                actor_type=actor_type, actor_id=actor_id, target_type="registration",
@@ -312,6 +315,7 @@ def _load_reg_for_actor(db: Session, *, org_id: int, registration_id: int,
     if reg is None or reg.org_id != org_id:
         raise TrainingError("registration not found")
     session = db.get(TrainingSession, reg.session_id)
+    assert session is not None
     owns = session.trainer_user_id in (None, principal.user_id)
     if not owns and not has_permission(db, principal, "training.manage_any_session"):
         raise PermissionDenied("training.manage_any_session")
@@ -372,6 +376,7 @@ def expire_unconfirmed_holds(db: Session, *, ttl_min: int | None = None) -> int:
     db.flush()
     for session_id in affected_sessions:
         session = db.get(TrainingSession, session_id)
+        assert session is not None
         propose_waitlist_promotion(db, org_id=session.org_id, session_id=session_id,
                                    requested_by_user_id=None)
     db.commit()

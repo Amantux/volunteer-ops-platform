@@ -59,7 +59,7 @@ class OrgScopedRepository(Generic[ModelT]):
         self.org_id = org_id
 
     def _scoped(self):
-        return select(self.model).where(self.model.org_id == self.org_id)  # type: ignore[attr-defined]
+        return select(self.model).where(self.model.org_id == self.org_id)
 
     def get(self, pk: int) -> ModelT | None:
         obj = self.db.get(self.model, pk)

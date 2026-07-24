@@ -35,9 +35,9 @@ def emit(
     org_id: int,
     action: str,
     actor_type: str = "user",
-    actor_id: str = "",
+    actor_id: str | int = "",
     target_type: str = "",
-    target_id: str = "",
+    target_id: str | int = "",
     meta: dict | None = None,
 ) -> AuditEvent:
     event = AuditEvent(
