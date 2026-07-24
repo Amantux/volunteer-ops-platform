@@ -26,6 +26,31 @@ def _social_events(db):
         OutboxEvent.event_type == "social.publish")) or 0
 
 
+def _user_with_perms(db, org, perms, email):
+    from app.core.session import make_session_token
+    from app.modules.identity.models import (
+        Person,
+        Role,
+        RolePermission,
+        User,
+        UserRoleAssignment,
+    )
+    role = Role(org_id=org.id, key=f"role_{email}", label="Test")
+    db.add(role)
+    db.flush()
+    for p in perms:
+        db.add(RolePermission(role_id=role.id, permission=p))
+    person = Person(org_id=org.id, name=email, email=email, email_verified=True)
+    db.add(person)
+    db.flush()
+    user = User(org_id=org.id, person_id=person.id)
+    db.add(user)
+    db.flush()
+    db.add(UserRoleAssignment(org_id=org.id, user_id=user.id, role_id=role.id))
+    db.commit()
+    return {"Authorization": f"Bearer {make_session_token(user_id=user.id, org_id=org.id)}"}
+
+
 def test_publish_refused_without_approval(client, db, admin_headers):
     cid = _channel(client, admin_headers)
     pid = _draft(client, admin_headers, cid)
@@ -122,3 +147,71 @@ def test_partial_failure_then_retry(client, db, admin_headers, monkeypatch):
     db.expire_all()
     target = db.scalar(select(SocialPublishTarget).where(SocialPublishTarget.post_id == pid))
     assert target.status == TargetStatus.published and target.attempts == 2
+
+
+def test_downstream_idempotency_key_is_stable_across_retries(client, db, admin_headers,
+                                                             monkeypatch):
+    """The key sent to the external publisher must NOT change on retry, or the receiver can't
+    dedupe an ambiguous failure (e.g. a timeout it actually processed) → double post."""
+    from app.modules.social import service
+    from app.modules.social.providers import PublishResult
+
+    cid = _channel(client, admin_headers)
+    pid = _draft(client, admin_headers, cid)
+    client.post(f"/api/social/posts/{pid}/submit", headers=admin_headers)
+    client.post(f"/api/social/posts/{pid}/approve", headers=admin_headers)
+
+    keys: list[str] = []
+
+    class Recorder:
+        def __init__(self, ok):
+            self.ok = ok
+
+        def publish(self, *, post, channel, idempotency_key):
+            keys.append(idempotency_key)
+            return PublishResult(ok=self.ok, external_ref="ok" if self.ok else "",
+                                 error="" if self.ok else "timeout")
+
+    monkeypatch.setattr(service, "get_publisher", lambda: Recorder(False))
+    client.post(f"/api/social/posts/{pid}/publish", headers=admin_headers)
+    relay(db)
+    monkeypatch.setattr(service, "get_publisher", lambda: Recorder(True))
+    client.post(f"/api/social/posts/{pid}/publish", headers=admin_headers)
+    relay(db)
+
+    assert len(keys) == 2 and keys[0] == keys[1]  # stable across the retry
+    assert ":a" not in keys[0]  # no attempt suffix in the downstream key
+
+
+def test_schedule_requires_publish_permission(client, db, org):
+    from datetime import timedelta
+
+    from app.core.db import utcnow
+    # A user who can manage + approve but NOT publish.
+    headers = _user_with_perms(db, org, ["social.draft", "social.manage", "social.approve"],
+                               "sched@x.org")
+    cid = _channel(client, headers)
+    pid = _draft(client, headers, cid)
+    client.post(f"/api/social/posts/{pid}/submit", headers=headers)
+    client.post(f"/api/social/posts/{pid}/approve", headers=headers)
+    when = (utcnow() + timedelta(hours=1)).isoformat()
+    r = client.post(f"/api/social/posts/{pid}/schedule", headers=headers,
+                    json={"scheduled_at": when})
+    assert r.status_code == 403  # scheduling commits to an unattended publish
+
+
+def test_disabled_channel_is_not_published(client, db, admin_headers):
+    from app.modules.social.models import SocialChannel
+
+    cid = _channel(client, admin_headers)
+    pid = _draft(client, admin_headers, cid)
+    client.post(f"/api/social/posts/{pid}/submit", headers=admin_headers)
+    client.post(f"/api/social/posts/{pid}/approve", headers=admin_headers)
+    ch = db.get(SocialChannel, cid)
+    ch.enabled = False
+    db.commit()
+    client.post(f"/api/social/posts/{pid}/publish", headers=admin_headers)
+    relay(db)
+    db.expire_all()
+    target = db.scalar(select(SocialPublishTarget).where(SocialPublishTarget.post_id == pid))
+    assert target.status == TargetStatus.failed and "disabled" in target.error

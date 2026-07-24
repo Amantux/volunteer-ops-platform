@@ -206,9 +206,19 @@ def _publish_target(db: Session, event: OutboxEvent) -> None:
     post = db.get(SocialPost, target.post_id)
     channel = db.get(SocialChannel, target.channel_id)
     assert post is not None and channel is not None
+    if not channel.enabled:
+        target.status = TargetStatus.failed
+        target.error = "channel is disabled"
+        db.flush()
+        _recompute_status(db, post)
+        return
+    # Downstream idempotency key is STABLE per target (no attempt suffix) so the receiver dedupes
+    # a re-publish of the same target — even if a prior attempt's ambiguous failure (e.g. a
+    # timeout the receiver actually processed) got marked failed. The *outbox* event key keeps the
+    # attempt suffix so a retry can enqueue a fresh event past the unique constraint.
     result = get_publisher().publish(
         post=post, channel=channel,
-        idempotency_key=f"social:{post.id}:target:{target.id}:a{target.attempts}")
+        idempotency_key=f"social:{post.id}:target:{target.id}")
     if result.ok:
         target.status = TargetStatus.published
         target.external_ref = result.external_ref

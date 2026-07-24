@@ -142,7 +142,9 @@ def approve(post_id: int, db: Session = Depends(get_db),
 
 @router.post("/posts/{post_id}/schedule")
 def schedule(post_id: int, payload: ScheduleIn, db: Session = Depends(get_db),
-             principal: Principal = Depends(require_permission("social.manage"))):
+             principal: Principal = Depends(require_permission("social.publish"))):
+    # Scheduling commits to an unattended publish (the beat runs with no principal), so it
+    # requires the publish permission, not just manage.
     try:
         post = service.schedule_post(db, org_id=principal.org_id, post_id=post_id,
                                      scheduled_at=payload.scheduled_at)

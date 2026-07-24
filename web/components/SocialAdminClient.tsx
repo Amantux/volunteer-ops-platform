@@ -637,7 +637,7 @@ function PostCard({
   const showEdit = can(P_MANAGE) && canEditStatus(post.status);
   const showSubmit = can(P_MANAGE) && canSubmitStatus(post.status);
   const showApprove = can(P_APPROVE) && canApproveStatus(post.status);
-  const showSchedule = can(P_MANAGE) && canScheduleStatus(post.status);
+  const showSchedule = can(P_PUBLISH) && canScheduleStatus(post.status);
   const showPublish = can(P_PUBLISH) && canPublishStatus(post.status);
   const isRetry =
     post.status === 'failed' || post.status === 'partially_published';
