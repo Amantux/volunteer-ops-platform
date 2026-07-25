@@ -45,6 +45,8 @@ class User(Base, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Bumped to revoke all of a user's issued session tokens (logout / forced sign-out).
+    session_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     person: Mapped[Person] = relationship(back_populates="user")
     role_assignments: Mapped[list[UserRoleAssignment]] = relationship(

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api import (
     admin,
@@ -21,6 +22,7 @@ from app.api import (
 )
 from app.core.config import settings
 from app.core.db import SessionLocal, init_db
+from app.core.production import assert_production_ready, is_production
 from app.modules.communications import service as _comms  # noqa: F401  (registers outbox handler)
 from app.seed import seed_bootstrap
 
@@ -46,19 +48,40 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("VOP_LLM_PROVIDER=anthropic requires VOP_LLM_API_KEY to be set.")
     if settings.social_publisher == "webhook" and not settings.social_webhook_url:
         raise RuntimeError("VOP_SOCIAL_PUBLISHER=webhook requires VOP_SOCIAL_WEBHOOK_URL.")
-    init_db()
+    # Refuse to start in staging/prod with an insecure configuration.
+    assert_production_ready(settings)
+    # In production, migrations (`alembic upgrade head`, run as a deploy step) are the source of
+    # truth for the schema — never create_all. Demo content is only seeded outside production.
+    if not is_production(settings):
+        init_db()
     with SessionLocal() as db:
-        seed_bootstrap(db)
+        seed_bootstrap(db, include_demo=not is_production(settings))
     yield
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Baseline security headers on every API response (HSTS only when in production/https)."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if is_production(settings):
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+        return response
 
 
 app = FastAPI(title="Volunteer Operations Platform", version="0.1.0", lifespan=lifespan)
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.public_base_url],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "Accept"],
 )
 
 app.include_router(public.router)

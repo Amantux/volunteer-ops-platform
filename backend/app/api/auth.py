@@ -85,7 +85,18 @@ def login(payload: TokenIn, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=409, detail="Activate your volunteer account first")
     db.commit()
-    return SessionOut(token=make_session_token(user_id=person.user.id, org_id=person.org_id))
+    return SessionOut(token=make_session_token(
+        user_id=person.user.id, org_id=person.org_id, version=person.user.session_version))
+
+
+@router.post("/logout")
+def logout(db: Session = Depends(get_db), principal: Principal = Depends(current_principal)):
+    """Revoke ALL of the caller's sessions by bumping their session_version."""
+    user = db.get(User, principal.user_id)
+    if user is not None:
+        user.session_version += 1
+        db.commit()
+    return {"message": "Signed out."}
 
 
 class MeOut(BaseModel):
@@ -120,4 +131,5 @@ def activate(payload: TokenIn, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.commit()
-    return SessionOut(token=make_session_token(user_id=user.id, org_id=person.org_id))
+    return SessionOut(token=make_session_token(
+        user_id=user.id, org_id=person.org_id, version=user.session_version))

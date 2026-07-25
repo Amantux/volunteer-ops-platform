@@ -35,7 +35,7 @@ def _principal_from_env() -> Principal:
     parsed = read_session_token(token)
     if parsed is None:
         raise MCPError(-32001, "MCP requires a valid VOP_MCP_SESSION_TOKEN")
-    user_id, org_id = parsed
+    user_id, org_id, _version = parsed
     return Principal(user_id=user_id, org_id=org_id)
 
 

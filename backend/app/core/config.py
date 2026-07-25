@@ -12,8 +12,18 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://vop:vop@localhost:5432/vop"
     redis_url: str = "redis://localhost:6379/0"
 
+    # Deployment environment. "dev" | "staging" | "prod". staging/prod trigger fail-fast
+    # production guardrails at startup (see app.core.production).
+    environment: str = "dev"
+
     # App secret for signing tokens (magic links, verification). CHANGE IN PROD.
     app_secret: str = "dev-secret-change-me"
+
+    # Authenticated session lifetime.
+    session_ttl_hours: int = 12
+
+    # Optional error tracking (Sentry). Empty = disabled.
+    sentry_dsn: str = ""
 
     # First-run bootstrap org + admin.
     bootstrap_org_name: str = "Community Volunteers"

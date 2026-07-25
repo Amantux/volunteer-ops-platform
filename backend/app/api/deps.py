@@ -41,13 +41,20 @@ def get_public_org(db: Session = Depends(get_db)) -> Organization:
 
 def current_principal(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
 ) -> Principal:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required")
     parsed = read_session_token(credentials.credentials)
     if parsed is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
-    user_id, org_id = parsed
+    user_id, org_id, version = parsed
+    # Bind the token to the live user: revoked (version bumped), deactivated, or deleted → 401.
+    from app.modules.identity.models import User
+    user = db.get(User, user_id)
+    if user is None or user.org_id != org_id or not user.is_active \
+            or user.session_version != version:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
     return Principal(user_id=user_id, org_id=org_id)
 
 

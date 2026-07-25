@@ -89,7 +89,10 @@ TEMPLATES: dict[str, tuple[str, str]] = {
 }
 
 
-def seed_bootstrap(db: Session) -> Organization:
+def seed_bootstrap(db: Session, *, include_demo: bool = True) -> Organization:
+    """Idempotent first-boot bootstrap. Structural data (org, roles, admin, email templates,
+    starter pages, the incident form) is always seeded; sample content (a demo training session +
+    volunteer opportunity + social channel) only when `include_demo` (never in production)."""
     org = db.scalar(select(Organization).where(Organization.slug == settings.bootstrap_org_slug))
     if org is None:
         org = Organization(name=settings.bootstrap_org_name, slug=settings.bootstrap_org_slug)
@@ -99,11 +102,12 @@ def seed_bootstrap(db: Session) -> Organization:
     _seed_roles(db, org.id)
     _seed_admin(db, org.id)
     _seed_templates(db, org.id)
-    _seed_demo_training(db, org.id)
-    _seed_demo_opportunity(db, org.id)
     _seed_pages(db, org.id)
-    _seed_social(db, org.id)
     _seed_forms(db, org.id)
+    if include_demo:
+        _seed_demo_training(db, org.id)
+        _seed_demo_opportunity(db, org.id)
+        _seed_social(db, org.id)
     db.commit()
     return org
 
