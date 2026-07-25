@@ -58,7 +58,7 @@ services:
   beat:
     build: ./backend
     environment: *app_env
-    command: celery -A app.worker beat --loglevel=info
+    command: celery -A app.worker beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     depends_on:
       redis: {condition: service_healthy}
 

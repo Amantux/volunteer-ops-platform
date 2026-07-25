@@ -10,9 +10,11 @@
 	reverse_proxy web:3000
 
 	# Baseline edge headers (the app also sets these; CSP is set by the web app's middleware).
+	# Set at the edge so they cover EVERY response, including app 5xx error bodies.
 	header {
 		Strict-Transport-Security "max-age=63072000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		-Server
 	}

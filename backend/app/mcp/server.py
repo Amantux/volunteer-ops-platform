@@ -35,7 +35,15 @@ def _principal_from_env() -> Principal:
     parsed = read_session_token(token)
     if parsed is None:
         raise MCPError(-32001, "MCP requires a valid VOP_MCP_SESSION_TOKEN")
-    user_id, org_id, _version = parsed
+    user_id, org_id, version = parsed
+    # Same revocation check as the HTTP surface: reject if the user is gone, deactivated, in a
+    # different org, or the token's session_version is stale (logged out / force-signed-out).
+    from app.modules.identity.models import User
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        if user is None or user.org_id != org_id or not user.is_active \
+                or user.session_version != version:
+            raise MCPError(-32001, "session token is invalid or has been revoked")
     return Principal(user_id=user_id, org_id=org_id)
 
 

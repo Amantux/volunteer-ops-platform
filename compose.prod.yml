@@ -81,15 +81,20 @@ services:
     command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info"]
     environment: *api-env
     depends_on:
+      postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
 
   beat:
     build: ./backend
     restart: unless-stopped
-    command: ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=info"]
+    # --schedule points at a writable path: the container runs as a non-root user and /app is
+    # root-owned, so the default ./celerybeat-schedule would be unwritable and crash-loop beat.
+    command: ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=info",
+              "--schedule=/tmp/celerybeat-schedule"]
     environment: *api-env
     depends_on:
+      postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
 

@@ -66,3 +66,20 @@ def test_inactive_user_token_rejected(client, db, admin_user, admin_headers):
     user.is_active = False
     db.commit()
     assert client.get("/api/auth/me", headers=admin_headers).status_code == 401
+
+
+def test_mcp_token_respects_revocation(db, org, admin_user, monkeypatch):
+    # The MCP surface must honor the same revocation as HTTP — a stale token can't drive tools.
+    from app.core.session import make_session_token
+    from app.mcp.server import MCPError, _principal_from_env
+
+    token = make_session_token(user_id=admin_user.id, org_id=org.id,
+                               version=admin_user.session_version)
+    monkeypatch.setenv("VOP_MCP_SESSION_TOKEN", token)
+    assert _principal_from_env().user_id == admin_user.id  # valid now
+
+    user = db.get(User, admin_user.id)
+    user.session_version += 1  # logout / forced revocation
+    db.commit()
+    with pytest.raises(MCPError):
+        _principal_from_env()

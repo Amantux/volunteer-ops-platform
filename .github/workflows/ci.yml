@@ -57,10 +57,13 @@ jobs:
         run: pip install -e '.[dev]' pip-audit bandit
       - name: Dependency audit (pip-audit)
         working-directory: backend
-        run: pip-audit --strict --desc
+        # Non-blocking: a newly-disclosed (possibly unfixable/transitive) CVE shouldn't red-flag
+        # main independent of the diff — surface it, triage it, don't gate merges on it.
+        continue-on-error: true
+        run: pip-audit --desc
       - name: SAST (bandit)
         working-directory: backend
-        # Fail on medium+ severity AND medium+ confidence findings.
+        # OUR code — blocking on medium+ severity AND medium+ confidence findings.
         run: bandit -r app -ll -ii
       - uses: actions/setup-node@v4
         with:
@@ -69,6 +72,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Frontend dependency audit (npm audit)
         working-directory: web
+        continue-on-error: true  # non-blocking, same rationale as pip-audit
         run: npm audit --audit-level=high
 
   frontend:

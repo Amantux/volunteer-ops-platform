@@ -28,7 +28,8 @@ def _checks(s: Settings) -> list[str]:
 
 
 def is_production(s: Settings) -> bool:
-    return s.environment in ("staging", "prod", "production")
+    # Normalize so VOP_ENVIRONMENT=PROD/Prod/" prod " can't silently skip the guardrails.
+    return s.environment.strip().lower() in ("staging", "prod", "production")
 
 
 def assert_production_ready(s: Settings) -> None:
