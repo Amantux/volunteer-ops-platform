@@ -2,8 +2,8 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 // These specs assume the FastAPI backend is reachable (see playwright.config.ts)
-// and has a PUBLISHED CMS page seeded at the slug `our-story`.
-const SLUG = '/our-story';
+// and has a PUBLISHED CMS page seeded at this slug (see backend seed `_seed_pages`).
+const SLUG = '/get-involved';
 
 async function expectNoSeriousA11yViolations(page: Page) {
   const results = await new AxeBuilder({ page })
