@@ -51,6 +51,9 @@ class WebhookPublisher:
                 idempotency_key: str) -> PublishResult:
         if not settings.social_webhook_url:
             return PublishResult(ok=False, error="social_webhook_url not configured")
+        # Only ever POST over http(s) — guard against a misconfigured file://custom-scheme URL.
+        if not settings.social_webhook_url.startswith(("http://", "https://")):
+            return PublishResult(ok=False, error="social_webhook_url must be http(s)")
         payload = json.dumps({
             "idempotency_key": idempotency_key,
             "platform": channel.platform.value,
@@ -65,7 +68,7 @@ class WebhookPublisher:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310 - configured URL
+            with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310  # nosec B310
                 ok = 200 <= resp.status < 300
                 return PublishResult(ok=ok, external_ref=f"webhook:{idempotency_key}",
                                      error="" if ok else f"webhook returned {resp.status}")

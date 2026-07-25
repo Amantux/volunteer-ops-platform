@@ -32,7 +32,8 @@ def verify(token: str | None, *, remote_ip: str | None = None) -> bool:
         req = urllib.request.Request(
             _TURNSTILE_URL, data=urllib.parse.urlencode(data).encode(), method="POST"
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310 - fixed https URL
+        # _TURNSTILE_URL is a fixed https:// constant, not user-controlled.
+        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310  # nosec B310
             import json
 
             return bool(json.loads(resp.read()).get("success"))
