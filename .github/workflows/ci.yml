@@ -43,6 +43,34 @@ jobs:
           alembic upgrade head
           alembic check   # fails if models diverge from the migration
 
+  security:
+    name: security (deps · SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install backend + scanners
+        working-directory: backend
+        run: pip install -e '.[dev]' pip-audit bandit
+      - name: Dependency audit (pip-audit)
+        working-directory: backend
+        run: pip-audit --strict --desc
+      - name: SAST (bandit)
+        working-directory: backend
+        # Fail on medium+ severity AND medium+ confidence findings.
+        run: bandit -r app -ll -ii
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Frontend dependency audit (npm audit)
+        working-directory: web
+        run: npm audit --audit-level=high
+
   frontend:
     name: frontend (build)
     runs-on: ubuntu-latest

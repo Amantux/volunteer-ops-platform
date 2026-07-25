@@ -13,5 +13,8 @@ COPY . .
 RUN npm run build
 
 ENV NODE_ENV=production
+# Run as the image's built-in unprivileged user.
+RUN chown -R node:node /app
+USER node
 EXPOSE 3000
 CMD ["npm", "run", "start"]

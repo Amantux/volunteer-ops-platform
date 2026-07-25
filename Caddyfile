@@ -1,0 +1,19 @@
+# Caddy auto-provisions and renews TLS for {$VOP_DOMAIN}. /api/* goes to the FastAPI service,
+# everything else to the Next.js web app. (The Next dev rewrite is unused in prod — Caddy is the
+# edge, so browser calls to /api are routed here, not through Next.)
+{$VOP_DOMAIN} {
+	encode gzip
+
+	@api path /api/*
+	reverse_proxy @api api:8000
+
+	reverse_proxy web:3000
+
+	# Baseline edge headers (the app also sets these; CSP is set by the web app's middleware).
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

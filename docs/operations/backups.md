@@ -130,3 +130,17 @@ committed to one separately.
   confirm `pg_restore` still succeeds against the new schema.
 - Record each drill's outcome (pass/fail, time taken) in the org's ops log — this is
   what makes the RTO target credible rather than aspirational.
+
+## Implementation note (single-VM Docker Compose)
+Concrete commands against `compose.prod.yml` (Postgres has no host port; run via the service):
+- **Backup:** `docker compose -f compose.prod.yml exec -T postgres pg_dump -U "$POSTGRES_USER"
+  -Fc "$POSTGRES_DB" > vop-$(date +%F).dump` — run from cron, then **copy off-host** (the whole
+  point is surviving VM loss). Encrypt at rest.
+- **Restore:** `docker compose -f compose.prod.yml exec -T postgres pg_restore -U "$POSTGRES_USER"
+  -d "$POSTGRES_DB" --clean --if-exists < vop-<date>.dump`, then `up -d` and verify `/api/ready`.
+- **Redis** holds only the rate-limiter and Celery broker state — transient, not backed up; the
+  transactional outbox in Postgres is the durable record of pending side-effects.
+- **Object storage / uploaded files:** not yet applicable (file uploads are deferred); when added,
+  the storage bucket needs its own backup + the same off-host + retention policy.
+- The `donation`/`payment_event` tables referenced above are from the (not-yet-built) donations
+  module — include them in the backup-critical set once that module ships.

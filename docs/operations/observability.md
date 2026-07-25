@@ -74,3 +74,17 @@ glance at before escalating. Contents:
 
 The status page reads from the same telemetry in §1 — it is a view, not a separate data
 source, so there is only one place metrics need to be correct.
+
+## Implementation note (what exists today)
+- **Endpoints:** `GET /api/health` (liveness), `GET /api/ready` (readiness — DB + Redis, 503 when
+  either is down), `GET /api/metrics` (outbox backlog: `outbox_pending`, `outbox_stuck`
+  [attempts ≥ 5], `outbox_oldest_pending_age_seconds`, `redis_ok`).
+- **The one alert that matters most:** a rising `outbox_pending`/`outbox_stuck` means the Celery
+  `worker`/`beat` isn't draining — email, reminders, campaign + social publishing, and workflow
+  escalations all stop silently. Alert on it AND on the worker/beat containers being down (a
+  throwing task is visible; a *stopped* scheduler is not). This is the "alert when automation stops
+  running, not only when it errors" requirement.
+- **Error tracking:** `VOP_SENTRY_DSN` is a config hook; wire the Sentry SDK to it if used
+  (optional, no hard dependency today).
+- **Logs:** `docker compose -f compose.prod.yml logs` per service; ship to your log store with
+  retention. Distributed tracing and a hosted status page are future enhancements.

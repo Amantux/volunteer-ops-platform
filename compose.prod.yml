@@ -1,0 +1,120 @@
+# Production stack for ONE organization instance (single-tenant per instance).
+# Bring up:  docker compose -f compose.prod.yml --env-file .env.prod up -d
+# Reverse proxy (Caddy) terminates TLS automatically for VOP_DOMAIN and proxies
+# /api -> api, everything else -> web. Postgres/Redis are internal-only (no host ports).
+#
+# The `migrate` service runs `alembic upgrade head` once and exits; `api` starts only after it
+# succeeds — schema changes are applied by migrations, never create_all (VOP_ENVIRONMENT=prod).
+
+x-api-env: &api-env
+  VOP_ENVIRONMENT: prod
+  VOP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  VOP_REDIS_URL: redis://redis:6379/0
+  VOP_APP_SECRET: ${VOP_APP_SECRET}
+  VOP_PUBLIC_BASE_URL: https://${VOP_DOMAIN}
+  VOP_BOOTSTRAP_ORG_NAME: ${VOP_BOOTSTRAP_ORG_NAME}
+  VOP_BOOTSTRAP_ORG_SLUG: ${VOP_BOOTSTRAP_ORG_SLUG}
+  VOP_BOOTSTRAP_ADMIN_EMAIL: ${VOP_BOOTSTRAP_ADMIN_EMAIL}
+  VOP_RATELIMIT_BACKEND: redis
+  VOP_BOTCHECK_PROVIDER: turnstile
+  VOP_TURNSTILE_SECRET: ${VOP_TURNSTILE_SECRET}
+  VOP_EMAIL_PROVIDER: smtp
+  VOP_EMAIL_FROM: ${VOP_EMAIL_FROM}
+  VOP_SMTP_HOST: ${VOP_SMTP_HOST}
+  VOP_SMTP_PORT: ${VOP_SMTP_PORT:-587}
+  VOP_SMTP_USERNAME: ${VOP_SMTP_USERNAME}
+  VOP_SMTP_PASSWORD: ${VOP_SMTP_PASSWORD}
+  VOP_SENTRY_DSN: ${VOP_SENTRY_DSN:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes: [vop_pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1"]
+    volumes: [vop_redis:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment: *api-env
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment: *api-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/ready').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info"]
+    environment: *api-env
+    depends_on:
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+
+  beat:
+    build: ./backend
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=info"]
+    environment: *api-env
+    depends_on:
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+
+  web:
+    build:
+      context: ./web
+      args:
+        API_REWRITE_TARGET: http://api:8000
+    restart: unless-stopped
+    depends_on: [api]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      VOP_DOMAIN: ${VOP_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web, api]
+
+volumes:
+  vop_pg:
+  vop_redis:
+  caddy_data:
+  caddy_config:

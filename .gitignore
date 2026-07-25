@@ -7,5 +7,7 @@ node_modules/
 dist/
 .next/
 .env
+.env.*
+!.env.*.example
 *.local
 .DS_Store
