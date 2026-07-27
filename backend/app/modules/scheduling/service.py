@@ -68,6 +68,41 @@ def add_role(db: Session, *, org_id: int, shift_id: int, name: str, capacity: in
     return role
 
 
+_REPEAT_DAYS = {"none": 0, "daily": 1, "weekly": 7, "biweekly": 14}
+_MAX_OCCURRENCES = 52
+
+
+def create_recurring_shifts(db: Session, *, org_id: int, event_id: int, starts_at: datetime,
+                            ends_at: datetime, location: str, roles: list[dict],
+                            repeat: str = "none", count: int = 1) -> list[Shift]:
+    """Create a signup-sheet's slots in one action: `count` shifts spaced by `repeat`, each with
+    the same set of roles (name + capacity). This is the SignUp.com-style 'several tunable slots'
+    generator — tune date/time (starts_at/ends_at), location, roles+capacity, cadence, and how
+    many occurrences."""
+    from datetime import timedelta
+
+    if ends_at <= starts_at:
+        raise SchedulingError("shift end must be after start")
+    if repeat not in _REPEAT_DAYS:
+        raise SchedulingError(f"repeat must be one of {sorted(_REPEAT_DAYS)}")
+    if not roles:
+        raise SchedulingError("add at least one role (a slot to sign up for)")
+    count = 1 if repeat == "none" else max(1, min(int(count), _MAX_OCCURRENCES))
+    step = timedelta(days=_REPEAT_DAYS[repeat])
+    duration = ends_at - starts_at
+    created: list[Shift] = []
+    for i in range(count):
+        s = starts_at + step * i
+        shift = create_shift(db, org_id=org_id, event_id=event_id, starts_at=s,
+                             ends_at=s + duration, location=location)
+        for r in roles:
+            add_role(db, org_id=org_id, shift_id=shift.id, name=str(r["name"]),
+                     capacity=int(r.get("capacity", 1)),
+                     required_qualification_type_id=r.get("required_qualification_type_id"))
+        created.append(shift)
+    return created
+
+
 # --- Eligibility + conflict (deterministic, explainable) -------------------- #
 
 def check_eligibility(db: Session, *, org_id: int, profile_id: int, role: ShiftRole) -> Eligibility:

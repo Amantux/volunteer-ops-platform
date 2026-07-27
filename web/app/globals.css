@@ -1312,6 +1312,30 @@ main {
   }
 }
 
+/* Schedule admin — roles editor + slot preview. */
+.schedule-roles {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin: 0 0 var(--space-4);
+}
+.schedule-roles legend {
+  font-weight: 600;
+  padding: 0 var(--space-2);
+}
+.schedule-roles .plain-list {
+  margin: var(--space-2) 0;
+}
+.schedule-roles .cms-field-row {
+  margin-bottom: var(--space-2);
+}
+.schedule-roles .field {
+  margin-bottom: 0;
+}
+.schedule-preview {
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

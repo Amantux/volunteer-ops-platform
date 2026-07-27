@@ -101,6 +101,9 @@ export default function DashboardClient() {
           <p className="muted">{me.email}</p>
         </div>
         <div className="cms-actions">
+          <Link className="btn btn-secondary" href="/admin/schedule">
+            Schedule
+          </Link>
           <Link className="btn btn-secondary" href="/admin/site">
             Manage site
           </Link>
