@@ -42,9 +42,15 @@ from .models import (
 from .payments.factory import get_payment_provider
 from .payments.port import DonationIntent, ProviderEvent
 
-_SUCCEEDED_EVENTS = {"checkout.session.completed", "payment_intent.succeeded"}
-_FAILED_EVENTS = {"payment_intent.payment_failed", "checkout.session.expired"}
+_SUCCEEDED_EVENTS = {"checkout.session.completed", "payment_intent.succeeded",
+                     "checkout.session.async_payment_succeeded"}
+_FAILED_EVENTS = {"payment_intent.payment_failed", "checkout.session.expired",
+                  "checkout.session.async_payment_failed"}
 _REFUND_EVENTS = {"charge.refunded"}
+# Money is collected only for these session payment_status values; delayed-notification methods
+# (ACH/SEPA/OXXO) deliver checkout.session.completed with payment_status="unpaid" and settle later
+# via async_payment_succeeded — do NOT issue a receipt for those (design §4 rule 3).
+_PAID_STATUSES = {"paid", "no_payment_required"}
 
 
 class DonationError(Exception):
@@ -171,20 +177,13 @@ def create_donation(db: Session, *, org_id: int, campaign_id: int, amount_minor_
                            display_name=donor_name, email=donor_email,
                            consent_marketing=consent_marketing, consent_source=consent_source)
 
-    plan = None
-    if kind == DonationKind.recurring.value:
-        plan = RecurringDonationPlan(
-            org_id=org_id, campaign_id=campaign_id, donor_id=donor.id if donor else None,
-            amount_minor_units=amount_minor_units, currency=currency or campaign.currency,
-            status=RecurringStatus.active)
-        db.add(plan)
-        db.flush()
-
+    # Note: for kind="recurring" the RecurringDonationPlan is NOT created here — it is activated
+    # only when a payment settles (see _mark_succeeded), so metrics never count uncollected plans.
     donation = Donation(
         org_id=org_id, campaign_id=campaign_id, donor_id=donor.id if donor else None,
         amount_minor_units=amount_minor_units, currency=currency or campaign.currency,
         kind=DonationKind(kind), status=DonationStatus.pending, is_anonymous=is_anonymous,
-        designation_code=designation_code, recurring_plan_id=plan.id if plan else None,
+        designation_code=designation_code, recurring_plan_id=None,
         provider=get_payment_provider().name, idempotency_key=secrets.token_hex(24),
         public_token=secrets.token_urlsafe(32))
     db.add(donation)
@@ -237,11 +236,22 @@ def record_webhook_event(db: Session, *, org_id: int, event: ProviderEvent, prov
     if event.type in _SUCCEEDED_EVENTS:
         outcome = _mark_succeeded(db, org_id=org_id, donation=donation, event=event)
     elif event.type in _FAILED_EVENTS:
-        donation.status = DonationStatus.failed
-        outcome = "applied"
+        # Out-of-order guard: a late/re-delivered failure must not clobber an already-collected
+        # donation (its receipt is immutable). Only a still-pending donation can go to failed.
+        if donation.status == DonationStatus.pending:
+            donation.status = DonationStatus.failed
+            outcome = "applied"
+        else:
+            pe.status = "ignored"
+            outcome = "ignored"
     elif event.type in _REFUND_EVENTS:
-        _apply_refund(db, donation=donation, event=event)
-        outcome = "applied"
+        # Refunds only apply to money that was actually collected.
+        if donation.status in (DonationStatus.succeeded, DonationStatus.partially_refunded):
+            _apply_refund(db, donation=donation, event=event)
+            outcome = "applied"
+        else:
+            pe.status = "ignored"
+            outcome = "ignored"
     else:
         pe.status = "ignored"
         outcome = "ignored"
@@ -283,11 +293,28 @@ def _match_donation(db: Session, *, org_id: int, event: ProviderEvent) -> Donati
 def _mark_succeeded(db: Session, *, org_id: int, donation: Donation, event: ProviderEvent) -> str:
     if donation.status == DonationStatus.succeeded:
         return "duplicate"  # already reconciled by an earlier event of the same session
+    data = event.data or {}
+    payment_status = data.get("payment_status")
+    if payment_status is not None and payment_status not in _PAID_STATUSES:
+        # e.g. checkout.session.completed with payment_status="unpaid" (ACH/SEPA pending) — the
+        # money isn't collected yet; wait for async_payment_succeeded before issuing a receipt.
+        return "ignored"
     donation.status = DonationStatus.succeeded
     donation.succeeded_at = utcnow()
-    charge = (event.data or {}).get("latest_charge") or (event.data or {}).get("charge")
+    charge = data.get("latest_charge") or data.get("charge")
     if charge:
         donation.provider_charge_id = str(charge)
+    # A recurring subscription's plan is activated ONLY now that a payment has settled — never on
+    # the unauthenticated create path (which would inflate MRR with uncollected $0 plans).
+    if donation.kind == DonationKind.recurring and donation.recurring_plan_id is None:
+        plan = RecurringDonationPlan(
+            org_id=org_id, campaign_id=donation.campaign_id, donor_id=donation.donor_id,
+            amount_minor_units=donation.amount_minor_units, currency=donation.currency,
+            status=RecurringStatus.active, provider=donation.provider,
+            provider_subscription_id=data.get("subscription"))
+        db.add(plan)
+        db.flush()
+        donation.recurring_plan_id = plan.id
     # Receipt + thank-you happen through the outbox (independently retryable) — never inline.
     enqueue(db, org_id=org_id, event_type="donation.succeeded",
             idempotency_key=f"donation-succeeded:{donation.id}",

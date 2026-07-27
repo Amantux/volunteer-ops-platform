@@ -48,7 +48,7 @@ def _volunteer_headers(db, org, email="vol@x.org"):
 
 
 def _deliver_webhook(client, db, donation_id, *, event_id, event_type, charge="ch_1",
-                     amount_refunded=None):
+                     amount_refunded=None, payment_status=None, subscription=None):
     """Build a provider-signed event for a donation and POST it to the webhook route."""
     d = db.get(Donation, donation_id)
     data = {"metadata": {"idempotency_key": d.idempotency_key}, "client_reference_id": d.id,
@@ -56,6 +56,10 @@ def _deliver_webhook(client, db, donation_id, *, event_id, event_type, charge="c
             "status": "complete", "latest_charge": charge}
     if amount_refunded is not None:
         data["amount_refunded"] = amount_refunded
+    if payment_status is not None:
+        data["payment_status"] = payment_status
+    if subscription is not None:
+        data["subscription"] = subscription
     payload, sig = FakePaymentProvider.make_signed_event(event_id, event_type, data)
     return client.post("/api/webhooks/payments", content=payload, headers={"X-Signature": sig})
 
@@ -219,11 +223,51 @@ def test_metrics_and_export(db, org, client, admin_headers):
     assert "5000" in csv_text and "4242" not in csv_text
 
 
-def test_recurring_donation_creates_a_plan(db, org, client, admin_headers):
+def test_recurring_plan_active_only_after_payment(db, org, client, admin_headers):
     _campaign(db, org)
-    _donate(client, donor_email="r@x.org", amount=1000, kind="recurring")
-    m = client.get("/api/admin/donations/metrics", headers=admin_headers).json()
-    assert m["active_recurring_plans"] == 1 and m["recurring_mrr_minor_units"] == 1000
+    did = _donate(client, donor_email="r@x.org", amount=1000, kind="recurring").json()["donation_id"]
+    # Before the webhook confirms payment, NO active plan / MRR is counted (no uncollected $0 plans).
+    m0 = client.get("/api/admin/donations/metrics", headers=admin_headers).json()
+    assert m0["active_recurring_plans"] == 0 and m0["recurring_mrr_minor_units"] == 0
+    relay(db)
+    _deliver_webhook(client, db, did, event_id="evt_sub", event_type="checkout.session.completed",
+                     payment_status="paid", subscription="sub_1")
+    m1 = client.get("/api/admin/donations/metrics", headers=admin_headers).json()
+    assert m1["active_recurring_plans"] == 1 and m1["recurring_mrr_minor_units"] == 1000
+
+
+def test_unpaid_checkout_does_not_issue_a_receipt(db, org, client):
+    """Delayed-notification methods deliver completed with payment_status=unpaid — don't succeed."""
+    _campaign(db, org)
+    did = _donate(client, donor_email="ach@x.org").json()["donation_id"]
+    relay(db)
+    resp = _deliver_webhook(client, db, did, event_id="evt_unpaid",
+                            event_type="checkout.session.completed", payment_status="unpaid")
+    assert resp.json()["outcome"] == "ignored"
+    relay(db)
+    db.expire_all()
+    assert db.get(Donation, did).status == DonationStatus.pending
+    assert db.scalar(select(DonationReceipt).where(DonationReceipt.donation_id == did)) is None
+    # When the async payment settles, it succeeds and issues the receipt.
+    _deliver_webhook(client, db, did, event_id="evt_async",
+                     event_type="checkout.session.async_payment_succeeded", payment_status="paid")
+    relay(db)
+    db.expire_all()
+    assert db.get(Donation, did).status == DonationStatus.succeeded
+    assert db.scalar(select(DonationReceipt).where(DonationReceipt.donation_id == did)) is not None
+
+
+def test_late_failure_event_cannot_clobber_a_succeeded_donation(db, org, client):
+    _campaign(db, org)
+    did = _donate(client, donor_email="race@x.org").json()["donation_id"]
+    relay(db)
+    _deliver_webhook(client, db, did, event_id="evt_ok2", event_type="payment_intent.succeeded")
+    # A late/re-delivered failure (distinct event id) must be ignored, not flip to failed.
+    resp = _deliver_webhook(client, db, did, event_id="evt_late_fail",
+                            event_type="payment_intent.payment_failed")
+    assert resp.json()["outcome"] == "ignored"
+    db.expire_all()
+    assert db.get(Donation, did).status == DonationStatus.succeeded
 
 
 def test_campaign_management_requires_permission(db, org, client):

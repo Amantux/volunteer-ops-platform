@@ -18,7 +18,11 @@ def get_payment_provider() -> PaymentProvider:
 
 
 def webhook_secret() -> str:
-    """The secret the current provider signs webhooks with (used only by the webhook route)."""
+    """The secret the current provider signs webhooks with (used only by the webhook route).
+
+    Single global secret — correct for this single-tenant-per-instance deployment. A multi-org
+    host would need a per-org STRIPE_WEBHOOK_SECRET resolved from IntegrationConfiguration before
+    trusting a signature; wire that in with the multi-tenant host/slug resolution, not before."""
     if settings.payment_provider == "stripe" and settings.stripe_secret_key:
         return settings.stripe_webhook_secret
     from .fake import FAKE_WEBHOOK_SECRET
