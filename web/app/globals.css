@@ -373,6 +373,14 @@ main {
   color: var(--warning);
   background: var(--warning-bg);
 }
+.pill-danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.pill-neutral {
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+}
 
 /* Detail ---------------------------------------------------------------- */
 .detail-grid {

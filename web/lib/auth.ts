@@ -232,6 +232,9 @@ export interface ScheduleRole {
   name: string;
   capacity: number;
   required_qualification_type_id?: number;
+  // When true, only volunteers with a current (cleared, unexpired) background
+  // check may claim this role. Omitted/false leaves the role open.
+  requires_background_check?: boolean;
 }
 
 // The recurring-slot builder payload. Times are ISO 8601; the server
@@ -330,6 +333,84 @@ export function grantQualification(input: {
   qualification_type_id: number;
 }): Promise<{ id: number }> {
   return authPost<{ id: number }>('/coordinator/qualifications', input);
+}
+
+// ---------------------------------------------------------------------------
+// Enrollments — long-term program placements (raiser/sitter etc). Distinct
+// from per-shift signups: an enrollment is an ongoing relationship with a
+// lifecycle. Read requires `enrollment.view`; write requires
+// `enrollment.manage`.
+// ---------------------------------------------------------------------------
+export type EnrollmentStatus = 'active' | 'paused' | 'completed' | 'withdrawn';
+
+export interface Enrollment {
+  id: number;
+  program_id: number;
+  role: string;
+  status: EnrollmentStatus;
+  started_at: string | null;
+  ended_at: string | null;
+  notes: string | null;
+  volunteer_name: string;
+  volunteer_email: string;
+}
+
+export interface EnrollmentFilters {
+  program_id?: number;
+  role?: string;
+  status?: EnrollmentStatus;
+}
+
+export function listEnrollments(
+  filters: EnrollmentFilters = {},
+): Promise<Enrollment[]> {
+  const params = new URLSearchParams();
+  if (filters.program_id != null) {
+    params.set('program_id', String(filters.program_id));
+  }
+  if (filters.role) params.set('role', filters.role);
+  if (filters.status) params.set('status', filters.status);
+  const query = params.toString();
+  return authGet<Enrollment[]>(
+    `/coordinator/enrollments${query ? `?${query}` : ''}`,
+  );
+}
+
+// Enrol a volunteer by email into a program role. The server returns a 400
+// (surfaced via ApiError.message) if the email isn't a volunteer or the
+// program is missing.
+export function createEnrollment(input: {
+  volunteer_email: string;
+  program_id: number;
+  role: string;
+  notes?: string;
+}): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/coordinator/enrollments', input);
+}
+
+export function setEnrollmentStatus(
+  id: number,
+  status: EnrollmentStatus,
+): Promise<{ id: number }> {
+  return authPost<{ id: number }>(`/coordinator/enrollments/${id}/status`, {
+    status,
+  });
+}
+
+// Background-check lifecycle. Internal/sensitive: gated on
+// `volunteer.manage_background_check`. `expires_at` is an ISO datetime.
+export type BackgroundCheckStatus =
+  | 'none'
+  | 'requested'
+  | 'cleared'
+  | 'expired';
+
+export function setBackgroundCheck(input: {
+  volunteer_email: string;
+  status: BackgroundCheckStatus;
+  expires_at?: string;
+}): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/coordinator/background-check', input);
 }
 
 // ---------------------------------------------------------------------------
