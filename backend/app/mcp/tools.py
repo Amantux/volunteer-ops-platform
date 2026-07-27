@@ -178,3 +178,16 @@ def _list_training_sessions(db: Session, principal: Principal, args: dict) -> di
          "seats_available": s.seats_available, "is_open": s.is_open}
         for s in rows
     ]}
+
+
+@tool(ToolContract(
+    name="get_donation_metrics", permission="donation.view",
+    risk=RiskLevel.r0_read, approval_required=False, reversible=True, idempotent=True,
+    audit_action="mcp.get_donation_metrics", data_classification="Confidential",
+))
+def _get_donation_metrics(db: Session, principal: Principal, args: dict) -> dict:
+    """Aggregates ONLY — never donor identity (INV-DONOR-SEPARATION). No write/refund tool
+    exists; donation.refund is R4-prohibited so it can never execute through MCP."""
+    from app.modules.donations.service import donation_metrics
+
+    return {"metrics": donation_metrics(db, org_id=principal.org_id)}
