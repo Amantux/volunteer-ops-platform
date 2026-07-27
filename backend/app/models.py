@@ -18,6 +18,16 @@ from app.modules.content.models import (  # noqa: F401
     Page,
     PageRevision,
 )
+from app.modules.donations.models import (  # noqa: F401
+    Donation,
+    DonationCampaign,
+    DonationReceipt,
+    Donor,
+    InKindDonation,
+    PaymentEvent,
+    ReceiptCounter,
+    RecurringDonationPlan,
+)
 from app.modules.forms.models import (  # noqa: F401
     FormDefinition,
     FormSubmission,

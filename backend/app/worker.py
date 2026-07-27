@@ -9,6 +9,7 @@ from __future__ import annotations
 from celery import Celery
 
 import app.modules.communications.service  # noqa: F401  (registers the outbox email handler)
+import app.modules.donations.service  # noqa: F401  (registers donation.checkout/succeeded handlers)
 import app.modules.social.service  # noqa: F401  (registers the "social.publish" handler)
 import app.modules.workflows.service  # noqa: F401  (registers the "workflow.notify" handler)
 from app.core.config import settings

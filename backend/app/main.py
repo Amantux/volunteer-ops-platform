@@ -13,6 +13,7 @@ from app.api import (
     auth,
     comms,
     content,
+    donations,
     forms,
     ops,
     people,
@@ -91,6 +92,8 @@ app.include_router(trainer.router)
 app.include_router(admin.router)
 app.include_router(scheduling.router)
 app.include_router(people.router)
+app.include_router(donations.public_router)
+app.include_router(donations.admin_router)
 app.include_router(comms.router)
 app.include_router(content.admin_router)
 app.include_router(content.public_router)
