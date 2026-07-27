@@ -402,12 +402,14 @@ interface RoleRow {
   capacity: string;
   // '' = no qualification required; otherwise the qualification type id.
   qualId: string;
+  // When true, the role requires a current background check.
+  bgCheck: boolean;
 }
 
 let roleKeySeq = 0;
 function newRole(): RoleRow {
   roleKeySeq += 1;
-  return { key: roleKeySeq, name: '', capacity: '1', qualId: '' };
+  return { key: roleKeySeq, name: '', capacity: '1', qualId: '', bgCheck: false };
 }
 
 function SlotBuilder({
@@ -520,6 +522,7 @@ function SlotBuilder({
       }
       const role: ScheduleRole = { name, capacity: cap };
       if (r.qualId) role.required_qualification_type_id = Number(r.qualId);
+      if (r.bgCheck) role.requires_background_check = true;
       cleanedRoles.push(role);
     }
     if (cleanedRoles.length === 0) {
@@ -720,6 +723,19 @@ function SlotBuilder({
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="field cms-level">
+                <label className="cms-check" htmlFor={`${eventId}-bg-${r.key}`}>
+                  <input
+                    id={`${eventId}-bg-${r.key}`}
+                    type="checkbox"
+                    checked={r.bgCheck}
+                    onChange={(e) =>
+                      updateRole(r.key, { bgCheck: e.target.checked })
+                    }
+                  />
+                  Requires background check
+                </label>
               </div>
               <button
                 type="button"

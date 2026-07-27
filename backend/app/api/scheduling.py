@@ -122,6 +122,7 @@ class SlotRoleIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     capacity: int = Field(default=1, ge=1)
     required_qualification_type_id: int | None = None
+    requires_background_check: bool = False
 
 
 class ScheduleIn(BaseModel):

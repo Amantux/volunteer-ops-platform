@@ -26,6 +26,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "training.approve_promotion", "training.register_guest", "report.view_training",
         "shift.manage", "shift.view_roster", "shift.record_attendance", "hours.approve",
         "report.view_staffing", "shift.view_eligible", "shift.signup",
+        "enrollment.view", "enrollment.manage", "volunteer.manage_background_check",
         "comms.manage", "comms.approve", "audit.view",
         "site.edit", "site.develop", "site.publish",
         "social.draft", "social.manage", "social.approve", "social.publish",
@@ -38,6 +39,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     "coordinator": [
         "shift.manage", "shift.view_roster", "shift.record_attendance", "hours.approve",
         "report.view_staffing",
+        "enrollment.view", "enrollment.manage", "volunteer.manage_background_check",
     ],
     "volunteer": [
         "shift.view_eligible", "shift.signup",
