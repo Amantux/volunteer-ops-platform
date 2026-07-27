@@ -31,6 +31,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "site.edit", "site.develop", "site.publish",
         "social.draft", "social.manage", "social.approve", "social.publish",
         "forms.admin", "forms.review", "workflows.admin", "incident.triage", "incident.close",
+        "donation.view", "donation.manage", "finance.export",
     ],
     "trainer": [
         "training.manage_session", "training.record_attendance", "training.record_completion",
@@ -55,6 +56,9 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "operations_coordinator": [
         "forms.review", "incident.triage", "incident.close",
+    ],
+    "finance_manager": [
+        "donation.view", "donation.manage", "finance.export",
     ],
 }
 
@@ -92,6 +96,11 @@ TEMPLATES: dict[str, tuple[str, str]] = {
         "Update on your report",
         "Hello,\n\nThank you for your report. Its status is now: {{status}}.\n\n"
         "We appreciate you letting us know.",
+    ),
+    "donation_thank_you": (
+        "Thank you for your donation",
+        "Thank you for your generous gift of {{amount_minor_units}} {{currency}} (minor units).\n"
+        "Your official receipt will follow. We're grateful for your support!",
     ),
     "shift_reminder": (
         "Reminder: your upcoming shift",

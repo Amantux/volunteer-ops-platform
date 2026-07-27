@@ -116,6 +116,12 @@ export default function DashboardClient() {
           <Link className="btn btn-secondary" href="/admin/enrollments">
             Enrollments
           </Link>
+          <Link className="btn btn-secondary" href="/admin/campaigns">
+            Campaigns
+          </Link>
+          <Link className="btn btn-secondary" href="/admin/donations">
+            Donations
+          </Link>
           <Link className="btn btn-secondary" href="/admin/reports">
             Reports
           </Link>

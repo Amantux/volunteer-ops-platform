@@ -184,6 +184,103 @@ export async function verifyToken(token: string): Promise<RegisterResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Donations — public (donor-facing) surface. No auth: the single-tenant org is
+// resolved server-side. The server owns all money state; the client persists
+// nothing before submit, and only the opaque capability token afterwards.
+// ---------------------------------------------------------------------------
+export type DonationKind = 'one_time' | 'recurring';
+
+export interface CampaignDesignation {
+  code: string;
+  label: string;
+}
+
+export interface CampaignProgress {
+  raised_minor_units: number;
+  goal_minor_units: number;
+  currency: string;
+}
+
+export interface PublicCampaign {
+  slug: string;
+  title: string;
+  description: string;
+  currency: string;
+  suggested_amounts: number[]; // minor units
+  designations: CampaignDesignation[];
+  // Present only when the org opted into publishing aggregate progress.
+  progress: CampaignProgress | null;
+}
+
+export interface CreateDonationInput {
+  campaign_slug: string;
+  amount_minor_units: number;
+  kind: DonationKind;
+  donor_name: string;
+  donor_email: string;
+  is_anonymous: boolean;
+  designation_code: string;
+  consent_marketing: boolean;
+  // Anti-bot token (e.g. Turnstile). Empty string is accepted in dev.
+  bot_token: string;
+}
+
+export interface CreateDonationResult {
+  donation_id: string;
+  token: string;
+  status: string;
+}
+
+export type DonationStatusValue =
+  | 'pending'
+  | 'processing'
+  | 'succeeded'
+  | 'failed'
+  | string;
+
+// Poll target. Deliberately carries NO donor data — only what the flow needs to
+// redirect to the hosted checkout and render the return page.
+export interface DonationStatus {
+  status: DonationStatusValue;
+  checkout_url: string | null;
+  amount_minor_units: number;
+  currency: string;
+}
+
+// A missing / unpublished campaign 404s — surfaced as null so the route can show
+// a friendly empty state; any other failure throws so the caller can degrade.
+export async function getCampaign(slug: string): Promise<PublicCampaign | null> {
+  const res = await fetch(`${apiBase()}/campaigns/${encodeURIComponent(slug)}`, {
+    cache: 'no-store',
+    headers: { accept: 'application/json' },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApiError(res.status, await parseError(res));
+  return (await res.json()) as PublicCampaign;
+}
+
+export async function createDonation(
+  input: CreateDonationInput,
+): Promise<CreateDonationResult> {
+  const res = await fetch(`${apiBase()}/public/donations`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new ApiError(res.status, await parseError(res));
+  return (await res.json()) as CreateDonationResult;
+}
+
+export async function getDonationStatus(token: string): Promise<DonationStatus> {
+  const res = await fetch(
+    `${apiBase()}/public/donations/status?token=${encodeURIComponent(token)}`,
+    { cache: 'no-store', headers: { accept: 'application/json' } },
+  );
+  if (!res.ok) throw new ApiError(res.status, await parseError(res));
+  return (await res.json()) as DonationStatus;
+}
+
+// ---------------------------------------------------------------------------
 // CMS site builder — block schema (shared by the public renderer and the
 // admin editor). This is the render-shape: html/embed content arrives under
 // `safe_html` / `raw_html` (see the round-trip note in <PageBlocks>).

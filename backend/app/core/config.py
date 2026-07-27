@@ -40,7 +40,9 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_starttls: bool = True
 
-    # Payments (Stripe) — scaffolded for the donations phase; unused in the training slice.
+    # Payments. "fake" (dev/tests/CI, no network) | "stripe" (hosted Checkout; test mode until a
+    # live secret key is set). Card entry is always on the provider surface — INV-NO-PAN.
+    payment_provider: str = "fake"
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
 

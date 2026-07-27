@@ -2,7 +2,14 @@
 // The opaque session token is the ONLY thing we persist (localStorage); no
 // passwords or personal data are stored client-side.
 
-import { ApiError, apiBase, parseError, type PageBlock } from '@/lib/api';
+import {
+  ApiError,
+  apiBase,
+  parseError,
+  type CampaignDesignation,
+  type DonationKind,
+  type PageBlock,
+} from '@/lib/api';
 
 export { ApiError };
 export type { PageBlock };
@@ -680,4 +687,130 @@ export async function runTransition(
     },
   );
   return (await res.json()) as TransitionResult;
+}
+
+// ---------------------------------------------------------------------------
+// Donations — finance admin surface. Read requires `donation.view`; create /
+// patch require `donation.manage`; the CSV export requires `finance.export`.
+// Amounts are integer minor units throughout (see lib/money.ts).
+// ---------------------------------------------------------------------------
+export type CampaignStatus =
+  | 'draft'
+  | 'active'
+  | 'paused'
+  | 'closed'
+  | 'archived';
+
+export interface Campaign {
+  id: number;
+  slug: string;
+  title: string;
+  description: string;
+  goal_minor_units: number;
+  currency: string;
+  status: CampaignStatus;
+  is_public: boolean;
+  publish_progress: boolean;
+  suggested_amounts: number[];
+  designations: CampaignDesignation[];
+}
+
+export interface CampaignCreateInput {
+  slug: string;
+  title: string;
+  description?: string;
+  goal_minor_units?: number;
+  currency: string;
+  status?: CampaignStatus;
+  is_public?: boolean;
+  publish_progress?: boolean;
+  suggested_amounts?: number[];
+  designations?: CampaignDesignation[];
+}
+
+// PATCH is sparse: send only the fields being changed (used by the row toggles).
+export interface CampaignPatch {
+  title?: string;
+  description?: string;
+  goal_minor_units?: number;
+  currency?: string;
+  status?: CampaignStatus;
+  is_public?: boolean;
+  publish_progress?: boolean;
+  suggested_amounts?: number[];
+  designations?: CampaignDesignation[];
+}
+
+export function listCampaigns(): Promise<Campaign[]> {
+  return authGet<Campaign[]>('/admin/campaigns');
+}
+
+export function createCampaign(
+  input: CampaignCreateInput,
+): Promise<Campaign> {
+  return authPost<Campaign>('/admin/campaigns', input);
+}
+
+export async function patchCampaign(
+  id: number,
+  patch: CampaignPatch,
+): Promise<Campaign> {
+  const res = await authFetch(`/admin/campaigns/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  return (await res.json()) as Campaign;
+}
+
+export interface Donation {
+  id: number;
+  amount_minor_units: number;
+  currency: string;
+  kind: DonationKind;
+  status: string;
+  is_anonymous: boolean;
+  // Server already substitutes "Anonymous" when the gift is anonymous.
+  donor_name: string;
+  created_at: string;
+}
+
+export function listDonations(): Promise<Donation[]> {
+  return authGet<Donation[]>('/admin/donations');
+}
+
+export interface DonationMetrics {
+  volume_minor_units: number;
+  donation_count: number;
+  donor_count: number;
+  average_minor_units: number;
+  refunded_minor_units: number;
+  active_recurring_plans: number;
+  recurring_mrr_minor_units: number;
+}
+
+export function getDonationMetrics(): Promise<DonationMetrics> {
+  return authGet<DonationMetrics>('/admin/donations/metrics');
+}
+
+export interface InKindInput {
+  description: string;
+  received_at: string; // ISO
+  campaign_id?: number;
+  donor_name: string;
+  donor_email?: string;
+  estimated_value_minor_units?: number;
+  currency: string;
+}
+
+export function recordInKind(input: InKindInput): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/admin/in-kind', input);
+}
+
+// Fetch the donations CSV export as a Blob. Uses authFetch so the Bearer token
+// is attached (the endpoint is gated on `finance.export`); the caller wires the
+// browser download.
+export async function exportDonationsCsv(): Promise<Blob> {
+  const res = await authFetch('/admin/donations/export.csv');
+  return res.blob();
 }

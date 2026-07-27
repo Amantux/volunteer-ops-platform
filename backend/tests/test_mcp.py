@@ -71,3 +71,24 @@ def test_tool_is_org_scoped(db, org, admin_user):
     with pytest.raises(ToolError):
         invoke_tool(db, other_principal, "register_training_guest",
                     {"session_id": session.id, "name": "X", "email": "x2@x.org"})
+
+
+def test_donation_metrics_tool_returns_aggregates_only(db, org, admin_user):
+    """The MCP donations read tool exposes aggregates, never donor identity."""
+    principal = Principal(user_id=admin_user.id, org_id=org.id)
+    result = invoke_tool(db, principal, "get_donation_metrics", {})
+    m = result["metrics"]
+    assert "volume_minor_units" in m and "donor_count" in m
+    # No donor identity fields anywhere in the payload (INV-DONOR-SEPARATION).
+    import json as _json
+    blob = _json.dumps(result).lower()
+    assert "email" not in blob and "display_name" not in blob and "donor_name" not in blob
+
+
+def test_no_donation_write_or_refund_tool_exists(db):
+    """No agent path to money mutation: no write/refund donation tool is registered."""
+    from app.mcp.tools import _REGISTRY
+    names = set(_REGISTRY)
+    assert not any("refund" in n for n in names)
+    assert not any(n.startswith("create_donation") or n.startswith("record_donation")
+                   for n in names)
