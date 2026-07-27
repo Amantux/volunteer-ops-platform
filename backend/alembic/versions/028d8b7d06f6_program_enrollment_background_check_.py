@@ -40,6 +40,10 @@ def upgrade() -> None:
     op.create_index(op.f('ix_program_enrollment_org_id'), 'program_enrollment', ['org_id'], unique=False)
     op.create_index(op.f('ix_program_enrollment_profile_id'), 'program_enrollment', ['profile_id'], unique=False)
     op.create_index(op.f('ix_program_enrollment_program_id'), 'program_enrollment', ['program_id'], unique=False)
+    # One non-terminal enrollment per (profile, program, role) — race-safe idempotency.
+    op.create_index('uq_active_program_enrollment', 'program_enrollment',
+                    ['profile_id', 'program_id', 'role'], unique=True,
+                    postgresql_where=sa.text("status NOT IN ('completed', 'withdrawn')"))
     # server_default backfills existing rows; then drop it — the ORM supplies the value on insert.
     op.add_column('shift_role', sa.Column('requires_background_check', sa.Boolean(),
                   nullable=False, server_default=sa.false()))
@@ -56,6 +60,7 @@ def downgrade() -> None:
     op.drop_column('volunteer_profile', 'background_check_expires_at')
     op.drop_column('volunteer_profile', 'background_check_status')
     op.drop_column('shift_role', 'requires_background_check')
+    op.drop_index('uq_active_program_enrollment', table_name='program_enrollment')
     op.drop_index(op.f('ix_program_enrollment_program_id'), table_name='program_enrollment')
     op.drop_index(op.f('ix_program_enrollment_profile_id'), table_name='program_enrollment')
     op.drop_index(op.f('ix_program_enrollment_org_id'), table_name='program_enrollment')

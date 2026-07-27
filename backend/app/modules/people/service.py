@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import audit
@@ -191,20 +192,32 @@ def enroll(db: Session, *, org_id: int, volunteer_email: str, program_id: int, r
         raise PeopleError("program not found")
     profile = _profile_by_email(db, org_id=org_id, volunteer_email=volunteer_email)
 
-    existing = db.scalar(select(ProgramEnrollment).where(
-        ProgramEnrollment.org_id == org_id,
-        ProgramEnrollment.profile_id == profile.id,
-        ProgramEnrollment.program_id == program_id,
-        ProgramEnrollment.role == role,
-        ProgramEnrollment.status.not_in(_TERMINAL_STATUSES),
-    ))
+    def _active(db: Session) -> ProgramEnrollment | None:
+        return db.scalar(select(ProgramEnrollment).where(
+            ProgramEnrollment.org_id == org_id,
+            ProgramEnrollment.profile_id == profile.id,
+            ProgramEnrollment.program_id == program_id,
+            ProgramEnrollment.role == role,
+            ProgramEnrollment.status.not_in(_TERMINAL_STATUSES),
+        ))
+
+    existing = _active(db)
     if existing is not None:
         return existing  # idempotent — already actively enrolled in this role
 
     enr = ProgramEnrollment(org_id=org_id, profile_id=profile.id, program_id=program_id,
                             role=role, status="active", started_at=utcnow(), notes=notes)
     db.add(enr)
-    db.flush()
+    try:
+        # The partial unique index (one non-terminal per profile/program/role) makes this
+        # race-safe: a concurrent enroll that won the insert raises here on flush.
+        with db.begin_nested():
+            db.flush()
+    except IntegrityError:
+        winner = _active(db)
+        if winner is not None:
+            return winner  # the concurrent request created it — return theirs, idempotently
+        raise
     audit.emit(db, org_id=org_id, action="program.enroll", actor_type="user", actor_id=actor_id,
                target_type="program_enrollment", target_id=enr.id,
                meta={"program_id": program_id, "role": role})
@@ -219,6 +232,10 @@ def set_enrollment_status(db: Session, *, org_id: int, enrollment_id: int, statu
     enr = db.get(ProgramEnrollment, enrollment_id)
     if enr is None or enr.org_id != org_id:
         raise PeopleError("enrollment not found")
+    if enr.status in _TERMINAL_STATUSES:
+        # completed/withdrawn are final — reviving one would resurrect a closed commitment and
+        # collide with the active-enrollment uniqueness. Start a new enrollment instead.
+        raise PeopleError(f"enrollment is already {enr.status}")
     previous = enr.status
     enr.status = status
     enr.ended_at = utcnow() if status in _TERMINAL_STATUSES else None
@@ -230,12 +247,18 @@ def set_enrollment_status(db: Session, *, org_id: int, enrollment_id: int, statu
 
 
 def list_enrollments(db: Session, *, org_id: int, program_id: int | None = None,
-                     role: str | None = None, status: str | None = None) -> list[dict]:
-    """List enrollments with the volunteer's display name/email for the coordinator view."""
+                     role: str | None = None, status: str | None = None,
+                     allowed_program_ids: set[int] | None = None) -> list[dict]:
+    """List enrollments with the volunteer's display name/email for the coordinator view.
+
+    ``allowed_program_ids`` restricts results to a whitelist of programs (the caller's fine-grained
+    scope); ``None`` means no restriction (org-wide). An empty set returns nothing."""
     q = select(ProgramEnrollment, Person).join(
         VolunteerProfile, ProgramEnrollment.profile_id == VolunteerProfile.id
     ).join(Person, VolunteerProfile.person_id == Person.id).where(
         ProgramEnrollment.org_id == org_id)
+    if allowed_program_ids is not None:
+        q = q.where(ProgramEnrollment.program_id.in_(allowed_program_ids))
     if program_id is not None:
         q = q.where(ProgramEnrollment.program_id == program_id)
     if role is not None:

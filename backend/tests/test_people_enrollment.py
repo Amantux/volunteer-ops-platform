@@ -9,7 +9,13 @@ from sqlalchemy import select
 
 from app.core.db import utcnow
 from app.core.session import make_session_token
-from app.modules.identity.models import Person, Role, User, UserRoleAssignment
+from app.modules.identity.models import (
+    Person,
+    Role,
+    RoleScopeType,
+    User,
+    UserRoleAssignment,
+)
 from app.modules.org.models import Program
 from app.modules.people import service as people
 from app.modules.people.models import ProgramEnrollment, VolunteerProfile
@@ -21,6 +27,21 @@ def _program(db, org, key="service_dog", name="Service Dog"):
     db.add(p)
     db.commit()
     return p
+
+
+def _coordinator_scoped_to(db, org, email, program_id):
+    """A coordinator whose grant is limited to one program."""
+    person = Person(org_id=org.id, name=email, email=email, email_verified=True)
+    db.add(person)
+    db.flush()
+    user = User(org_id=org.id, person_id=person.id)
+    db.add(user)
+    db.flush()
+    role = db.scalar(select(Role).where(Role.org_id == org.id, Role.key == "coordinator"))
+    db.add(UserRoleAssignment(org_id=org.id, user_id=user.id, role_id=role.id,
+                              scope_type=RoleScopeType.program, scope_id=program_id))
+    db.commit()
+    return {"Authorization": f"Bearer {make_session_token(user_id=user.id, org_id=org.id)}"}
 
 
 def _volunteer(db, org, email):
@@ -170,3 +191,51 @@ def test_background_check_requires_permission(db, org, client):
     r = client.post("/api/coordinator/background-check", headers=vol_headers,
                     json={"volunteer_email": "nobody@x.org", "status": "cleared"})
     assert r.status_code == 403
+
+
+# --- Fine-grained scope (reviewer findings) --------------------------------- #
+
+def test_program_scoped_coordinator_cannot_read_other_programs_rosters(db, org, client,
+                                                                       admin_headers):
+    """A coordinator scoped to program A must not see program B's enrollments (or their PII)."""
+    a = _program(db, org, "prog_a", "Program A")
+    b = _program(db, org, "prog_b", "Program B")
+    _volunteer(db, org, "in-a@x.org")
+    _volunteer(db, org, "in-b@x.org")
+    client.post("/api/coordinator/enrollments", headers=admin_headers,
+                json={"volunteer_email": "in-a@x.org", "program_id": a.id, "role": "raiser"})
+    client.post("/api/coordinator/enrollments", headers=admin_headers,
+                json={"volunteer_email": "in-b@x.org", "program_id": b.id, "role": "raiser"})
+
+    coord_a = _coordinator_scoped_to(db, org, "coord-a@x.org", a.id)
+    # Unfiltered list returns ONLY program A's roster.
+    rows = client.get("/api/coordinator/enrollments", headers=coord_a).json()
+    assert {r["program_id"] for r in rows} == {a.id}
+    assert all("in-b@x.org" not in r["volunteer_email"] for r in rows)
+    # Explicitly asking for program B is forbidden, not silently broadened.
+    assert client.get(f"/api/coordinator/enrollments?program_id={b.id}",
+                      headers=coord_a).status_code == 403
+
+
+def test_program_scoped_coordinator_cannot_set_background_check(db, org, client):
+    """Background check is org-wide-only — a program-scoped coordinator is refused."""
+    a = _program(db, org, "prog_a", "Program A")
+    _volunteer(db, org, "subject@x.org")
+    coord_a = _coordinator_scoped_to(db, org, "coord-a@x.org", a.id)
+    r = client.post("/api/coordinator/background-check", headers=coord_a,
+                    json={"volunteer_email": "subject@x.org", "status": "cleared"})
+    assert r.status_code == 403
+
+
+def test_cannot_transition_a_terminal_enrollment(db, org, client, admin_headers):
+    prog = _program(db, org)
+    _volunteer(db, org, "done@x.org")
+    eid = client.post("/api/coordinator/enrollments", headers=admin_headers,
+                      json={"volunteer_email": "done@x.org", "program_id": prog.id,
+                            "role": "raiser"}).json()["id"]
+    client.post(f"/api/coordinator/enrollments/{eid}/status", headers=admin_headers,
+                json={"status": "withdrawn"})
+    revive = client.post(f"/api/coordinator/enrollments/{eid}/status", headers=admin_headers,
+                         json={"status": "active"})
+    assert revive.status_code == 400
+    assert "already withdrawn" in revive.json()["detail"]

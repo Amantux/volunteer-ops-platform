@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.authz import PermissionDenied, Principal, require_scoped
+from app.core.authz import PermissionDenied, Principal, require_scoped, scoped_program_ids
 from app.modules.people import service as people
 from app.modules.people.models import ProgramEnrollment
 
@@ -48,8 +48,15 @@ class EnrollmentStatusIn(BaseModel):
 def list_enrollments(program_id: int | None = None, role: str | None = None,
                      status: str | None = None, db: Session = Depends(get_db),
                      principal: Principal = Depends(require_permission("enrollment.view"))):
+    # Fine-grained scope: a program-scoped coordinator must not read other programs' rosters/PII.
+    if program_id is not None:
+        _enforce_program_scope(db, principal, "enrollment.view", program_id)
+        allowed = None  # already narrowed to a program this principal covers
+    else:
+        # No filter: restrict to the programs the principal covers (None = org-wide, all).
+        allowed = scoped_program_ids(db, principal, "enrollment.view")
     return people.list_enrollments(db, org_id=principal.org_id, program_id=program_id,
-                                   role=role, status=status)
+                                   role=role, status=status, allowed_program_ids=allowed)
 
 
 @router.post("/coordinator/enrollments", response_model=IdOut, status_code=201)
@@ -97,6 +104,10 @@ def set_background_check(
     payload: BackgroundCheckIn, db: Session = Depends(get_db),
     principal: Principal = Depends(require_permission("volunteer.manage_background_check")),
 ):
+    # Background check is a person-level (not program-level) sensitive attribute → require an
+    # org-wide grant (program_id=None is satisfiable only by an org-scoped grant), so a
+    # program-scoped coordinator can't alter it for volunteers outside their remit.
+    _enforce_program_scope(db, principal, "volunteer.manage_background_check", None)
     try:
         profile = people.set_background_check(
             db, org_id=principal.org_id, volunteer_email=payload.volunteer_email,

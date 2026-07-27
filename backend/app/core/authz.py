@@ -97,3 +97,18 @@ def require_scoped(db: Session, principal: Principal, permission: str, *,
                    program_id: int | None = None) -> None:
     if not authorize(db, principal, permission, program_id=program_id):
         raise PermissionDenied(permission)
+
+
+def scoped_program_ids(db: Session, principal: Principal, permission: str) -> set[int] | None:
+    """The set of program ids the principal may act on for ``permission``. Returns ``None`` when
+    the principal holds the permission org-wide (i.e. covers *all* programs) — callers should
+    treat ``None`` as "no program restriction" and any set (including empty) as a whitelist."""
+    ids: set[int] = set()
+    for g in grants_for(db, user_id=principal.user_id, org_id=principal.org_id):
+        if g.permission != permission:
+            continue
+        if g.scope_type == RoleScopeType.org or g.scope_id is None:
+            return None  # org-wide grant covers everything
+        if g.scope_type == RoleScopeType.program:
+            ids.add(g.scope_id)
+    return ids

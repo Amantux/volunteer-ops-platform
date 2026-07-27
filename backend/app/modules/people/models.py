@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base, TimestampMixin
@@ -38,6 +38,16 @@ class ProgramEnrollment(Base, TimestampMixin):
     is enforced in the service, so historical (completed/withdrawn) enrollments can coexist."""
 
     __tablename__ = "program_enrollment"
+    # At most one *non-terminal* enrollment per (profile, program, role); completed/withdrawn
+    # rows are excluded so history can accumulate. Backs the service's idempotency race-safely.
+    __table_args__ = (
+        Index(
+            "uq_active_program_enrollment", "profile_id", "program_id", "role",
+            unique=True,
+            sqlite_where=text("status NOT IN ('completed', 'withdrawn')"),
+            postgresql_where=text("status NOT IN ('completed', 'withdrawn')"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     org_id: Mapped[int] = mapped_column(ForeignKey("organization.id"), nullable=False, index=True)
