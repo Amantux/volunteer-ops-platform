@@ -103,6 +103,77 @@ def create_recurring_shifts(db: Session, *, org_id: int, event_id: int, starts_a
     return created
 
 
+def send_shift_reminders(db: Session, *, within_hours: int = 24) -> int:
+    """Beat task: email each confirmed volunteer once, ~within_hours before their shift. Idempotent
+    via `reminded_at` + a per-signup outbox key."""
+    from datetime import timedelta
+
+    from app.modules.communications.service import queue_email
+    from app.modules.identity.models import Person
+    from app.modules.people.models import VolunteerProfile
+
+    now = utcnow()
+    cutoff = now + timedelta(hours=within_hours)
+    signups = db.scalars(
+        select(ShiftSignup).join(ShiftSignup.role).join(ShiftRole.shift).where(
+            ShiftSignup.status.in_([SignupStatus.confirmed, SignupStatus.attended]),
+            ShiftSignup.reminded_at.is_(None),
+            Shift.starts_at > now, Shift.starts_at <= cutoff)).all()
+    count = 0
+    for s in signups:
+        shift = s.role.shift
+        profile = db.get(VolunteerProfile, s.volunteer_profile_id)
+        person = db.get(Person, profile.person_id) if profile is not None else None
+        if person is not None and person.email:
+            queue_email(db, org_id=s.org_id, idempotency_key=f"shift-reminder:{s.id}",
+                        to_email=person.email, template_key="shift_reminder",
+                        context={"name": person.name, "when": shift.starts_at.isoformat(),
+                                 "location": shift.location or "TBA"})
+        s.reminded_at = now
+        count += 1
+    db.flush()
+    return count
+
+
+def mark_no_show(db: Session, *, org_id: int, signup_id: int, actor_id) -> ShiftSignup:
+    s = db.get(ShiftSignup, signup_id)
+    if s is None or s.org_id != org_id:
+        raise SchedulingError("signup not found")
+    s.no_show = True
+    db.flush()
+    audit.emit(db, org_id=org_id, action="shift.no_show", actor_id=actor_id,
+               target_type="shift_signup", target_id=s.id)
+    return s
+
+
+def hours_report(db: Session, *, org_id: int, approved_only: bool = True) -> dict:
+    """Impact report: total (approved) volunteer hours + a per-volunteer breakdown."""
+    from app.modules.identity.models import Person
+    from app.modules.people.models import VolunteerProfile
+
+    names = {
+        pid: name for pid, name in db.execute(
+            select(VolunteerProfile.id, Person.name)
+            .join(Person, Person.id == VolunteerProfile.person_id)
+            .where(VolunteerProfile.org_id == org_id)).all()
+    }
+    stmt = select(VolunteerHourEntry).where(VolunteerHourEntry.org_id == org_id)
+    if approved_only:
+        stmt = stmt.where(VolunteerHourEntry.approved.is_(True))
+    per: dict[int, float] = {}
+    total = 0.0
+    for e in db.scalars(stmt):
+        per[e.volunteer_profile_id] = per.get(e.volunteer_profile_id, 0.0) + e.hours
+        total += e.hours
+    return {
+        "total_hours": round(total, 2),
+        "volunteers": len(per),
+        "by_volunteer": sorted(
+            [{"name": names.get(pid, "Unknown"), "hours": round(h, 2)} for pid, h in per.items()],
+            key=lambda r: r["hours"], reverse=True),
+    }
+
+
 # --- Eligibility + conflict (deterministic, explainable) -------------------- #
 
 def check_eligibility(db: Session, *, org_id: int, profile_id: int, role: ShiftRole) -> Eligibility:

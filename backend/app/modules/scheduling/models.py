@@ -115,6 +115,8 @@ class ShiftSignup(Base, TimestampMixin):
     status: Mapped[SignupStatus] = mapped_column(default=SignupStatus.confirmed, nullable=False)
     waitlist_position: Mapped[int | None] = mapped_column(Integer)
     checked_in_at: Mapped[datetime | None] = mapped_column(DateTime)
+    reminded_at: Mapped[datetime | None] = mapped_column(DateTime)  # a reminder was sent
+    no_show: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     role: Mapped[ShiftRole] = relationship(back_populates="signups")
 

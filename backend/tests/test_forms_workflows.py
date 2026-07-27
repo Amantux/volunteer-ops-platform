@@ -120,6 +120,24 @@ def test_incident_lifecycle_with_approval_gate(client, db, admin_headers):
     assert out["current_state"] == "resolved" and out["status"] == "closed"
 
 
+def test_incident_resolution_emails_the_reporter(client, db, org, admin_headers):
+    # A notify action with {template, to} sends a real email to the reporter (via the outbox).
+    from conftest import inbox, relay
+    r = client.post("/api/forms/incident_report/submissions", json={"answers": {
+        "category": "safety", "description": "spill in the hall",
+        "reporter_contact": "reporter@x.org"}})
+    iid = db.get(FormSubmission, r.json()["id"]).workflow_instance_id
+    for name in ("triage", "start"):
+        client.post(f"/api/instances/{iid}/transitions/{name}", headers=admin_headers, json={})
+    client.post(f"/api/instances/{iid}/transitions/resolve", headers=admin_headers, json={})
+    ar = db.scalar(select(ApprovalRequest).where(ApprovalRequest.workflow_instance_id == iid))
+    client.post(f"/api/approvals/{ar.id}/decide", headers=admin_headers, json={"approve": True})
+    relay(db)  # workflow.notify -> enqueues email.send
+    relay(db)  # email.send -> dev inbox
+    msgs = inbox(db, org.id)
+    assert any(m.to_email == "reporter@x.org" and "resolved" in m.body_text.lower() for m in msgs)
+
+
 def test_transition_requires_the_declared_permission(client, db, org):
     sid = _new_incident(client)
     iid = db.get(FormSubmission, sid).workflow_instance_id

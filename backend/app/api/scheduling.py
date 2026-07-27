@@ -152,6 +152,77 @@ def create_schedule(event_id: int, payload: ScheduleIn, db: Session = Depends(ge
     return {"created": len(shifts), "shift_ids": [s.id for s in shifts]}
 
 
+class QualTypeIn(BaseModel):
+    key: str = Field(min_length=1, max_length=80)
+    label: str = Field(min_length=1, max_length=160)
+    validity_days: int | None = None
+
+
+class GrantQualIn(BaseModel):
+    volunteer_email: str
+    qualification_type_id: int
+
+
+@router.get("/coordinator/qualification-types")
+def list_qualification_types(db: Session = Depends(get_db),
+                             principal: Principal = Depends(require_permission("shift.manage"))):
+    from app.modules.people import service as people
+    return [{"id": q.id, "key": q.key, "label": q.label, "validity_days": q.validity_days}
+            for q in people.list_qualification_types(db, org_id=principal.org_id)]
+
+
+@router.post("/coordinator/qualification-types", response_model=IdOut, status_code=201)
+def create_qualification_type(payload: QualTypeIn, db: Session = Depends(get_db),
+                              principal: Principal = Depends(require_permission("shift.manage"))):
+    from app.modules.people import service as people
+    try:
+        qt = people.create_qualification_type(db, org_id=principal.org_id, key=payload.key,
+                                              label=payload.label, validity_days=payload.validity_days)
+    except people.PeopleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return IdOut(id=qt.id)
+
+
+@router.post("/coordinator/qualifications", response_model=IdOut, status_code=201)
+def grant_qualification(payload: GrantQualIn, db: Session = Depends(get_db),
+                        principal: Principal = Depends(require_permission("shift.manage"))):
+    """Grant a qualification to a volunteer so they become eligible for gated slots."""
+    from app.modules.people import service as people
+    try:
+        vq = people.grant_qualification(db, org_id=principal.org_id,
+                                        volunteer_email=payload.volunteer_email,
+                                        qualification_type_id=payload.qualification_type_id)
+    except people.PeopleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return IdOut(id=vq.id)
+
+
+class NoShowIn(BaseModel):
+    signup_id: int
+
+
+@router.post("/coordinator/no-show", response_model=IdOut)
+def mark_no_show(payload: NoShowIn, db: Session = Depends(get_db),
+                 principal: Principal = Depends(require_permission("shift.record_attendance"))):
+    _enforce_scope(db, principal, "shift.record_attendance",
+                   _program_of_signup(db, principal.org_id, payload.signup_id))
+    try:
+        s = service.mark_no_show(db, org_id=principal.org_id, signup_id=payload.signup_id,
+                                 actor_id=principal.user_id)
+    except SchedulingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    db.commit()
+    return IdOut(id=s.id)
+
+
+@router.get("/coordinator/reports/hours")
+def hours_report(db: Session = Depends(get_db),
+                 principal: Principal = Depends(require_permission("report.view_staffing"))):
+    return service.hours_report(db, org_id=principal.org_id)
+
+
 @router.get("/coordinator/metrics/staffing")
 def staffing(db: Session = Depends(get_db),
              principal: Principal = Depends(require_permission("report.view_staffing"))):
