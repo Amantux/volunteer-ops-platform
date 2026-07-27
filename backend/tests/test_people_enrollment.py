@@ -117,6 +117,22 @@ def test_background_check_gates_a_slot(db, org, client, admin_headers):
                                    role=role).eligible is True
 
 
+def test_signup_endpoint_rejects_gated_slot(db, org, client, admin_headers):
+    """The gate must hold at the write path, not just be hidden in the read path."""
+    prog = _program(db, org)
+    _, vol_headers = _volunteer(db, org, "eager@x.org")
+    ev = sched.create_event(db, org_id=org.id, title="Care", program_id=prog.id)
+    s = sched.create_shift(db, org_id=org.id, event_id=ev.id,
+                           starts_at=utcnow() + timedelta(hours=24),
+                           ends_at=utcnow() + timedelta(hours=26), location="Home")
+    role = sched.add_role(db, org_id=org.id, shift_id=s.id, name="Sitter",
+                          requires_background_check=True)
+    db.commit()
+    r = client.post("/api/shifts/signup", headers=vol_headers, json={"role_id": role.id})
+    assert r.status_code == 409
+    assert "not eligible" in r.json()["detail"]
+
+
 def test_expired_background_check_does_not_qualify(db, org, client, admin_headers):
     prog = _program(db, org)
     profile, _ = _volunteer(db, org, "lapsed@x.org")
