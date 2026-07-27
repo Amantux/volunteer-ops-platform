@@ -83,6 +83,10 @@ class ShiftRole(Base, TimestampMixin):
     required_qualification_type_id: Mapped[int | None] = mapped_column(
         ForeignKey("qualification_type.id")
     )
+    # Eligibility: volunteers must also hold a cleared, non-expired background check.
+    requires_background_check: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
 
     shift: Mapped[Shift] = relationship(back_populates="roles")
     signups: Mapped[list[ShiftSignup]] = relationship(

@@ -60,9 +60,11 @@ def create_shift(db: Session, *, org_id: int, event_id: int, starts_at: datetime
 
 
 def add_role(db: Session, *, org_id: int, shift_id: int, name: str, capacity: int = 1,
-             required_qualification_type_id: int | None = None) -> ShiftRole:
+             required_qualification_type_id: int | None = None,
+             requires_background_check: bool = False) -> ShiftRole:
     role = ShiftRole(org_id=org_id, shift_id=shift_id, name=name, capacity=capacity,
-                     required_qualification_type_id=required_qualification_type_id)
+                     required_qualification_type_id=required_qualification_type_id,
+                     requires_background_check=requires_background_check)
     db.add(role)
     db.flush()
     return role
@@ -98,7 +100,8 @@ def create_recurring_shifts(db: Session, *, org_id: int, event_id: int, starts_a
         for r in roles:
             add_role(db, org_id=org_id, shift_id=shift.id, name=str(r["name"]),
                      capacity=int(r.get("capacity", 1)),
-                     required_qualification_type_id=r.get("required_qualification_type_id"))
+                     required_qualification_type_id=r.get("required_qualification_type_id"),
+                     requires_background_check=bool(r.get("requires_background_check", False)))
         created.append(shift)
     return created
 
@@ -177,8 +180,15 @@ def hours_report(db: Session, *, org_id: int, approved_only: bool = True) -> dic
 # --- Eligibility + conflict (deterministic, explainable) -------------------- #
 
 def check_eligibility(db: Session, *, org_id: int, profile_id: int, role: ShiftRole) -> Eligibility:
+    if role.requires_background_check:
+        from app.modules.people.models import VolunteerProfile
+        from app.modules.people.service import has_valid_background_check
+
+        profile = db.get(VolunteerProfile, profile_id)
+        if profile is None or not has_valid_background_check(profile):
+            return Eligibility(False, "requires a cleared background check")
     if role.required_qualification_type_id is None:
-        return Eligibility(True, "no qualification required")
+        return Eligibility(True, "eligible")
     qual = db.scalar(select(VolunteerQualification).where(
         VolunteerQualification.org_id == org_id,
         VolunteerQualification.profile_id == profile_id,
