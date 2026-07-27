@@ -86,6 +86,16 @@ TEMPLATES: dict[str, tuple[str, str]] = {
         "News from Riverside Volunteers",
         "Hi {{name}},\n\nHere's the latest from the team. Thank you for volunteering!",
     ),
+    "incident_update": (
+        "Update on your report",
+        "Hello,\n\nThank you for your report. Its status is now: {{status}}.\n\n"
+        "We appreciate you letting us know.",
+    ),
+    "shift_reminder": (
+        "Reminder: your upcoming shift",
+        "Hi {{name}},\n\nThis is a friendly reminder about your upcoming shift on {{when}} at "
+        "{{location}}. Thank you — see you there!",
+    ),
 }
 
 
@@ -306,7 +316,8 @@ def _seed_forms(db: Session, org_id: int) -> None:
              "permission": "incident.close", "requires_approval": True,
              "action": "work.close",  # R3 — an agent could never execute this
              "entry_actions": [{"emit_audit": "incident.resolved"},
-                               {"notify": "incident resolved"}]},
+                               {"notify": {"template": "incident_update",
+                                           "to": "reporter_contact"}}]},
         ]))
     db.flush()
 

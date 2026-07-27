@@ -103,3 +103,59 @@ def grant_course_qualification(db: Session, *, org_id: int, person_id: int, cour
         granted_at=utcnow(), expires_at=expires, source="training",
     ))
     db.flush()
+
+
+class PeopleError(Exception):
+    pass
+
+
+def list_qualification_types(db: Session, *, org_id: int) -> list:
+    from app.modules.people.models import QualificationType
+    return list(db.scalars(select(QualificationType).where(QualificationType.org_id == org_id)
+                           .order_by(QualificationType.label)))
+
+
+def create_qualification_type(db: Session, *, org_id: int, key: str, label: str,
+                              validity_days: int | None = None):
+    from app.modules.people.models import QualificationType
+    if db.scalar(select(QualificationType).where(
+            QualificationType.org_id == org_id, QualificationType.key == key)) is not None:
+        raise PeopleError("a qualification type with that key already exists")
+    qt = QualificationType(org_id=org_id, key=key, label=label or key, validity_days=validity_days)
+    db.add(qt)
+    db.flush()
+    return qt
+
+
+def grant_qualification(db: Session, *, org_id: int, volunteer_email: str,
+                        qualification_type_id: int, source: str = "manual") -> VolunteerQualification:
+    """Grant a qualification to a volunteer (by email). Idempotent per (profile, type)."""
+    from app.modules.identity.models import Person
+    from app.modules.people.models import QualificationType
+
+    qtype = db.get(QualificationType, qualification_type_id)
+    if qtype is None or qtype.org_id != org_id:
+        raise PeopleError("qualification type not found")
+    person = db.scalar(select(Person).where(Person.org_id == org_id,
+                                            Person.email == volunteer_email.lower()))
+    profile = None if person is None else db.scalar(select(VolunteerProfile).where(
+        VolunteerProfile.org_id == org_id, VolunteerProfile.person_id == person.id))
+    if profile is None:
+        raise PeopleError("no volunteer with that email")
+    existing = db.scalar(select(VolunteerQualification).where(
+        VolunteerQualification.profile_id == profile.id,
+        VolunteerQualification.qualification_type_id == qualification_type_id))
+    if existing is not None:
+        existing.granted_at = utcnow()
+        existing.expires_at = (utcnow() + timedelta(days=qtype.validity_days)
+                               if qtype.validity_days else None)
+        db.flush()
+        return existing
+    vq = VolunteerQualification(
+        org_id=org_id, profile_id=profile.id, qualification_type_id=qualification_type_id,
+        granted_at=utcnow(),
+        expires_at=(utcnow() + timedelta(days=qtype.validity_days) if qtype.validity_days else None),
+        source=source)
+    db.add(vq)
+    db.flush()
+    return vq

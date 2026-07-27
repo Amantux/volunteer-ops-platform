@@ -136,9 +136,19 @@ def _run_actions(db: Session, definition: WorkflowDefinition, actions: list,
                        target_type="workflow_instance", target_id=inst.id)
         if "notify" in action:
             # Governed, idempotent side-effect via the outbox — never a synchronous send.
+            # `notify` is either a message string (audit-only) or {"template", "to"} to email the
+            # recipient named by a field on the subject form submission.
+            spec = action["notify"]
+            if isinstance(spec, dict):
+                payload = {"instance_id": inst.id, "template": spec.get("template"),
+                           "to_field": spec.get("to")}
+                key_part = str(spec.get("template", ""))
+            else:
+                payload = {"instance_id": inst.id, "message": str(spec)}
+                key_part = str(spec)
             enqueue(db, org_id=inst.org_id, event_type="workflow.notify",
-                    idempotency_key=f"wf-notify:{inst.id}:{inst.current_state}:{action['notify']}",
-                    payload={"instance_id": inst.id, "message": str(action["notify"])})
+                    idempotency_key=f"wf-notify:{inst.id}:{inst.current_state}:{key_part}",
+                    payload=payload)
 
 
 def perform_transition(db: Session, principal: Principal, *, instance_id: int,
@@ -283,8 +293,22 @@ def sweep_deadlines(db: Session) -> int:
 
 @handler("workflow.notify")
 def _notify(db: Session, event: OutboxEvent) -> None:
-    """Idempotent notification side-effect. v1 records an auditable notification; wiring it to a
-    real email template/recipient is a follow-up (kept out of the request path deliberately)."""
+    """Idempotent notification: when the action names a template + recipient field, email the
+    recipient (resolved from the subject form submission) via the outbox; always audit."""
+    instance_id = int(event.payload["instance_id"])
+    template = event.payload.get("template")
+    to_field = event.payload.get("to_field")
+    if template and to_field:
+        inst = db.get(WorkflowInstance, instance_id)
+        if inst is not None and inst.subject_type == "form_submission":
+            from app.modules.communications.service import queue_email
+            from app.modules.forms.models import FormSubmission
+            sub = db.get(FormSubmission, inst.subject_id)
+            recipient = sub.answers.get(to_field) if sub is not None else None
+            if recipient:
+                queue_email(db, org_id=event.org_id, idempotency_key=f"wf-mail:{event.id}",
+                            to_email=str(recipient), template_key=str(template),
+                            context={"status": inst.current_state})
     audit.emit(db, org_id=event.org_id, action="workflow.notified", actor_type="service",
-               target_type="workflow_instance", target_id=int(event.payload["instance_id"]),
-               meta={"message": event.payload.get("message", "")})
+               target_type="workflow_instance", target_id=instance_id,
+               meta={"template": template or "", "message": event.payload.get("message", "")})

@@ -7,12 +7,16 @@ import { formatWhen } from '@/lib/api';
 import {
   ApiError,
   createEvent,
+  createQualificationType,
   createSchedule,
   getBoard,
   getMe,
   getToken,
+  grantQualification,
+  listQualificationTypes,
   type BoardEvent,
   type Me,
+  type QualificationType,
   type ScheduleRepeat,
   type ScheduleRole,
 } from '@/lib/auth';
@@ -22,7 +26,12 @@ const P_MANAGE = 'shift.manage';
 
 type State =
   | { kind: 'loading' }
-  | { kind: 'ready'; me: Me; board: BoardEvent[] }
+  | {
+      kind: 'ready';
+      me: Me;
+      board: BoardEvent[];
+      qualTypes: QualificationType[];
+    }
   | { kind: 'error'; message: string };
 
 const REPEAT_OPTIONS: { value: ScheduleRepeat; label: string }[] = [
@@ -86,12 +95,14 @@ export default function ScheduleAdminClient() {
     setState({ kind: 'loading' });
     getMe()
       .then(async (me) => {
-        // /board also requires shift.manage; skip the call when the permission
-        // is absent so we show the access note rather than a 403.
-        const board = me.permissions.includes(P_MANAGE)
-          ? await getBoard()
-          : [];
-        setState({ kind: 'ready', me, board });
+        // /board and /qualification-types also require shift.manage; skip the
+        // calls when the permission is absent so we show the access note rather
+        // than a 403.
+        const canManage = me.permissions.includes(P_MANAGE);
+        const [board, qualTypes] = canManage
+          ? await Promise.all([getBoard(), listQualificationTypes()])
+          : [[], []];
+        setState({ kind: 'ready', me, board, qualTypes });
       })
       .catch((err: unknown) => {
         if (bounceOn401(err)) return;
@@ -122,6 +133,18 @@ export default function ScheduleAdminClient() {
     }
   }, [bounceOn401]);
 
+  // Reload just the qualification types (after creating one) so the role
+  // selects and the grant form pick up the new option.
+  const refreshQualTypes = useCallback(async () => {
+    try {
+      const qualTypes = await listQualificationTypes();
+      setState((prev) => (prev.kind === 'ready' ? { ...prev, qualTypes } : prev));
+    } catch (err) {
+      if (bounceOn401(err)) return;
+      setActionError(errText(err, 'We couldn’t refresh qualification types.'));
+    }
+  }, [bounceOn401]);
+
   if (state.kind === 'loading') {
     return (
       <div className="container page">
@@ -142,7 +165,7 @@ export default function ScheduleAdminClient() {
     );
   }
 
-  const { me, board } = state;
+  const { me, board, qualTypes } = state;
   const canManage = me.permissions.includes(P_MANAGE);
 
   // Merge board events with locally-created (still slot-less) sheets. Board wins
@@ -228,6 +251,7 @@ export default function ScheduleAdminClient() {
             ) : (
               <SlotBuilder
                 events={eventOptions}
+                qualTypes={qualTypes}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 onCreated={async (count) => {
@@ -249,6 +273,12 @@ export default function ScheduleAdminClient() {
           {selectedId != null && (
             <SheetView title={selectedTitle} event={selectedEvent} />
           )}
+
+          <QualificationsPanel
+            qualTypes={qualTypes}
+            onChanged={refreshQualTypes}
+            onAuthLost={() => router.replace('/login')}
+          />
         </>
       )}
     </div>
@@ -370,16 +400,19 @@ interface RoleRow {
   key: number;
   name: string;
   capacity: string;
+  // '' = no qualification required; otherwise the qualification type id.
+  qualId: string;
 }
 
 let roleKeySeq = 0;
 function newRole(): RoleRow {
   roleKeySeq += 1;
-  return { key: roleKeySeq, name: '', capacity: '1' };
+  return { key: roleKeySeq, name: '', capacity: '1', qualId: '' };
 }
 
 function SlotBuilder({
   events,
+  qualTypes,
   selectedId,
   onSelect,
   onCreated,
@@ -387,6 +420,7 @@ function SlotBuilder({
   onAuthLost,
 }: {
   events: { event_id: number; title: string }[];
+  qualTypes: QualificationType[];
   selectedId: number | null;
   onSelect: (id: number) => void;
   onCreated: (count: number) => void | Promise<void>;
@@ -484,7 +518,9 @@ function SlotBuilder({
         setFieldError(`Give “${name}” a capacity of at least 1.`);
         return;
       }
-      cleanedRoles.push({ name, capacity: cap });
+      const role: ScheduleRole = { name, capacity: cap };
+      if (r.qualId) role.required_qualification_type_id = Number(r.qualId);
+      cleanedRoles.push(role);
     }
     if (cleanedRoles.length === 0) {
       setFieldError('Add at least one role with a name and capacity.');
@@ -667,6 +703,24 @@ function SlotBuilder({
                   }
                 />
               </div>
+              <div className="field cms-grow">
+                <label className="sr-only" htmlFor={`${eventId}-qual-${r.key}`}>
+                  Required qualification for role {i + 1}
+                </label>
+                <select
+                  id={`${eventId}-qual-${r.key}`}
+                  className="cms-select"
+                  value={r.qualId}
+                  onChange={(e) => updateRole(r.key, { qualId: e.target.value })}
+                >
+                  <option value="">None — anyone eligible</option>
+                  {qualTypes.map((q) => (
+                    <option key={q.id} value={q.id}>
+                      Requires {q.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -792,5 +846,254 @@ function SheetView({
         </>
       )}
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Qualifications — collapsible coordinator tool: define qualification types and
+// grant them to volunteers by email. Roles above can then require a type.
+// ---------------------------------------------------------------------------
+function QualificationsPanel({
+  qualTypes,
+  onChanged,
+  onAuthLost,
+}: {
+  qualTypes: QualificationType[];
+  onChanged: () => void | Promise<void>;
+  onAuthLost: () => void;
+}) {
+  return (
+    <details className="faq-item section-gap">
+      <summary>Qualifications</summary>
+      <div className="faq-answer">
+        <p className="muted" style={{ marginTop: 0 }}>
+          Define qualification types (e.g. Food Handling, First Aid) and grant
+          them to volunteers. A slot role can then require a type so only
+          qualified volunteers see it.
+        </p>
+
+        {qualTypes.length > 0 && (
+          <ul className="plain-list section-gap">
+            {qualTypes.map((q) => (
+              <li key={q.id}>
+                <span className="signup-name">{q.label}</span>
+                <span className="muted">{q.key}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <CreateQualType onCreated={onChanged} onAuthLost={onAuthLost} />
+        <GrantQual qualTypes={qualTypes} onAuthLost={onAuthLost} />
+      </div>
+    </details>
+  );
+}
+
+function CreateQualType({
+  onCreated,
+  onAuthLost,
+}: {
+  onCreated: () => void | Promise<void>;
+  onAuthLost: () => void;
+}) {
+  const keyId = useId();
+  const labelId = useId();
+  const [key, setKey] = useState('');
+  const [label, setLabel] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    const k = key.trim();
+    const l = label.trim();
+    if (!k || !l) {
+      setError('A key and a label are both required.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await createQualificationType({ key: k, label: l });
+      setNotice(`Qualification type “${l}” created.`);
+      setKey('');
+      setLabel('');
+      await onCreated();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        onAuthLost();
+        return;
+      }
+      setError(
+        errText(err, 'We couldn’t create that qualification type. Try again.'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="section-gap" onSubmit={onSubmit} noValidate>
+      <h3>Add a qualification type</h3>
+      <div className="cms-field-row">
+        <div className="field cms-grow">
+          <label htmlFor={keyId}>
+            Key <span className="req">*</span>
+          </label>
+          <input
+            id={keyId}
+            type="text"
+            placeholder="e.g. food_handling"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+        </div>
+        <div className="field cms-grow">
+          <label htmlFor={labelId}>
+            Label <span className="req">*</span>
+          </label>
+          <input
+            id={labelId}
+            type="text"
+            placeholder="e.g. Food Handling"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+          />
+        </div>
+      </div>
+      <div aria-live="polite">
+        {notice && (
+          <p className="field-success" role="status">
+            {notice}
+          </p>
+        )}
+      </div>
+      <div aria-live="assertive">
+        {error && (
+          <p className="field-error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+      <button type="submit" className="btn btn-secondary" disabled={busy}>
+        {busy ? 'Adding…' : 'Add type'}
+      </button>
+    </form>
+  );
+}
+
+function GrantQual({
+  qualTypes,
+  onAuthLost,
+}: {
+  qualTypes: QualificationType[];
+  onAuthLost: () => void;
+}) {
+  const emailId = useId();
+  const typeId = useId();
+  const [email, setEmail] = useState('');
+  const [selected, setSelected] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    const addr = email.trim();
+    if (!addr) {
+      setError('A volunteer email is required.');
+      return;
+    }
+    if (!selected) {
+      setError('Choose a qualification type to grant.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await grantQualification({
+        volunteer_email: addr,
+        qualification_type_id: Number(selected),
+      });
+      setNotice(`Granted to ${addr}.`);
+      setEmail('');
+      setSelected('');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        onAuthLost();
+        return;
+      }
+      // Surfaces the backend's 400 detail (e.g. the email isn't a volunteer).
+      setError(errText(err, 'We couldn’t grant that qualification. Try again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="section-gap" onSubmit={onSubmit} noValidate>
+      <h3>Grant a qualification</h3>
+      {qualTypes.length === 0 ? (
+        <p className="muted">Add a qualification type first, then grant it.</p>
+      ) : (
+        <>
+          <div className="cms-field-row">
+            <div className="field cms-grow">
+              <label htmlFor={emailId}>
+                Volunteer email <span className="req">*</span>
+              </label>
+              <input
+                id={emailId}
+                type="email"
+                placeholder="volunteer@example.org"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="field cms-grow">
+              <label htmlFor={typeId}>
+                Qualification <span className="req">*</span>
+              </label>
+              <select
+                id={typeId}
+                className="cms-select"
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+              >
+                <option value="" disabled>
+                  Choose a type…
+                </option>
+                {qualTypes.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div aria-live="polite">
+            {notice && (
+              <p className="field-success" role="status">
+                {notice}
+              </p>
+            )}
+          </div>
+          <div aria-live="assertive">
+            {error && (
+              <p className="field-error" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+          <button type="submit" className="btn btn-secondary" disabled={busy}>
+            {busy ? 'Granting…' : 'Grant qualification'}
+          </button>
+        </>
+      )}
+    </form>
   );
 }

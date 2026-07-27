@@ -135,6 +135,65 @@ def test_eligible_roles_and_ics_feed(client, db, org):
     assert ics.status_code == 200 and "BEGIN:VCALENDAR" in ics.text and "Cleanup" in ics.text
 
 
+def test_shift_reminder_sent_once(client, db, org):
+    from conftest import inbox, relay
+    _, role = _shift(db, org, start_offset_h=12, capacity=2)  # within the 24h reminder window
+    _, vheaders = _volunteer(db, org, "vol@x.org")
+    client.post("/api/shifts/signup", headers=vheaders, json={"role_id": role.id})
+    assert service.send_shift_reminders(db) == 1
+    db.commit()
+    relay(db)
+    assert any(m.to_email == "vol@x.org" and "reminder" in m.subject.lower()
+               for m in inbox(db, org.id))
+    assert service.send_shift_reminders(db) == 0  # reminded_at set → not sent again
+
+
+def test_mark_no_show_via_api(client, db, org, admin_headers):
+    _, role = _shift(db, org, capacity=2)
+    _, vheaders = _volunteer(db, org, "v2@x.org")
+    client.post("/api/shifts/signup", headers=vheaders, json={"role_id": role.id})
+    sid = db.scalar(select(ShiftSignup)).id
+    assert client.post("/api/coordinator/no-show", headers=admin_headers,
+                       json={"signup_id": sid}).status_code == 200
+    db.expire_all()
+    assert db.get(ShiftSignup, sid).no_show is True
+
+
+def test_hours_report_aggregates_approved_hours(client, db, org, admin_user, admin_headers):
+    _, role = _shift(db, org, capacity=2)
+    prof, _ = _volunteer(db, org, "v3@x.org")
+    s = service.signup_for_shift(db, org_id=org.id, profile_id=prof.id, role_id=role.id)
+    service.check_in(db, org_id=org.id, signup_id=s.id, actor_id=admin_user.id)
+    entry = service.record_hours(db, org_id=org.id, signup_id=s.id, hours=3.0, actor_id=admin_user.id)
+    service.approve_hours(db, org_id=org.id, entry_id=entry.id, actor_user_id=admin_user.id)
+    db.commit()
+    rpt = client.get("/api/coordinator/reports/hours", headers=admin_headers).json()
+    assert rpt["total_hours"] == 3.0 and rpt["volunteers"] == 1
+    assert rpt["by_volunteer"][0]["hours"] == 3.0
+
+
+def test_qualification_gated_slot_hidden_until_granted(client, admin_headers, db, org):
+    qid = client.post("/api/coordinator/qualification-types", headers=admin_headers,
+                      json={"key": "puppy_cert", "label": "Puppy Raiser Certified"}).json()["id"]
+    ev = client.post("/api/coordinator/events", headers=admin_headers,
+                     json={"title": "Dog handling"}).json()["id"]
+    start = (utcnow() + timedelta(days=2)).isoformat()
+    end = (utcnow() + timedelta(days=2, hours=2)).isoformat()
+    client.post(f"/api/coordinator/events/{ev}/schedule", headers=admin_headers, json={
+        "starts_at": start, "ends_at": end, "location": "Kennel",
+        "roles": [{"name": "Handler", "capacity": 3, "required_qualification_type_id": qid}],
+        "repeat": "none", "count": 1})
+
+    _, vheaders = _volunteer(db, org, "vol@x.org")
+    elig = client.get("/api/shifts/eligible", headers=vheaders).json()
+    assert all(r["role"] != "Handler" for r in elig)  # gated out — not certified
+
+    client.post("/api/coordinator/qualifications", headers=admin_headers,
+                json={"volunteer_email": "vol@x.org", "qualification_type_id": qid})
+    elig2 = client.get("/api/shifts/eligible", headers=vheaders).json()
+    assert any(r["role"] == "Handler" for r in elig2)  # now eligible
+
+
 def test_recurring_shifts_generate_tunable_slots(db, org):
     ev = service.create_event(db, org_id=org.id, title="Park cleanup")
     start = (utcnow() + timedelta(days=7)).replace(hour=10, minute=0, second=0, microsecond=0)

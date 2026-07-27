@@ -21,6 +21,7 @@ celery_app.conf.beat_schedule = {
     "send-due-campaigns": {"task": "app.worker.send_due_campaigns", "schedule": 60.0},
     "publish-due-social": {"task": "app.worker.publish_due_social", "schedule": 60.0},
     "sweep-workflow-deadlines": {"task": "app.worker.sweep_workflow_deadlines", "schedule": 300.0},
+    "send-shift-reminders": {"task": "app.worker.send_shift_reminders", "schedule": 3600.0},
 }
 celery_app.conf.timezone = "UTC"
 
@@ -67,5 +68,16 @@ def sweep_workflow_deadlines() -> int:
 
     with SessionLocal() as db:
         n = sweep_deadlines(db)
+        db.commit()
+        return n
+
+
+@celery_app.task(name="app.worker.send_shift_reminders")
+def send_shift_reminders() -> int:
+    """Email confirmed volunteers ahead of their upcoming shifts."""
+    from app.modules.scheduling.service import send_shift_reminders as _remind
+
+    with SessionLocal() as db:
+        n = _remind(db)
         db.commit()
         return n

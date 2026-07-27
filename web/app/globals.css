@@ -452,6 +452,36 @@ main {
   font-size: 0.9rem;
   margin: var(--space-1) 0 0;
 }
+.field-success {
+  color: var(--success);
+  font-size: 0.9rem;
+  margin: var(--space-1) 0 0;
+}
+
+/* Reporting table (hours & impact) -------------------------------------- */
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-4);
+}
+.report-table th,
+.report-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.report-table thead th {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.report-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.report-table tbody tr:hover {
+  background: var(--surface-sunken);
+}
 .req {
   color: var(--danger);
 }
