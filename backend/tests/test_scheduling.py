@@ -135,6 +135,35 @@ def test_eligible_roles_and_ics_feed(client, db, org):
     assert ics.status_code == 200 and "BEGIN:VCALENDAR" in ics.text and "Cleanup" in ics.text
 
 
+def test_recurring_shifts_generate_tunable_slots(db, org):
+    ev = service.create_event(db, org_id=org.id, title="Park cleanup")
+    start = (utcnow() + timedelta(days=7)).replace(hour=10, minute=0, second=0, microsecond=0)
+    shifts = service.create_recurring_shifts(
+        db, org_id=org.id, event_id=ev.id, starts_at=start, ends_at=start + timedelta(hours=2),
+        location="Main Park", roles=[{"name": "Helper", "capacity": 6}],
+        repeat="weekly", count=4)
+    assert len(shifts) == 4
+    assert (shifts[1].starts_at - shifts[0].starts_at).days == 7      # weekly cadence
+    assert all(r.capacity == 6 for s in shifts for r in s.roles)      # each slot has the role
+    assert shifts[0].roles[0].name == "Helper"
+
+
+def test_create_schedule_via_api_makes_recurring_signup_sheet(client, admin_headers, db, org):
+    ev = client.post("/api/coordinator/events", headers=admin_headers,
+                     json={"title": "Community Fair"}).json()["id"]
+    start = (utcnow() + timedelta(days=3)).isoformat()
+    end = (utcnow() + timedelta(days=3, hours=3)).isoformat()
+    r = client.post(f"/api/coordinator/events/{ev}/schedule", headers=admin_headers, json={
+        "starts_at": start, "ends_at": end, "location": "Main St",
+        "roles": [{"name": "Greeter", "capacity": 4}, {"name": "Setup", "capacity": 2}],
+        "repeat": "weekly", "count": 3})
+    assert r.status_code == 201 and r.json()["created"] == 3
+    # The generated slots show up on the public opportunities surface once the event is public.
+    board = client.get("/api/coordinator/board", headers=admin_headers).json()
+    event = next(e for e in board if e["title"] == "Community Fair")
+    assert len(event["shifts"]) == 3 and len(event["shifts"][0]["roles"]) == 2
+
+
 def test_coordinator_creates_and_sees_staffing_via_api(client, admin_headers, db, org):
     ev = client.post("/api/coordinator/events", headers=admin_headers, json={"title": "Fair"})
     assert ev.status_code == 201

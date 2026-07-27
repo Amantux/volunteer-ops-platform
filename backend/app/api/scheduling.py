@@ -118,6 +118,40 @@ def create_role(payload: RoleIn, db: Session = Depends(get_db),
     return IdOut(id=role.id)
 
 
+class SlotRoleIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    capacity: int = Field(default=1, ge=1)
+    required_qualification_type_id: int | None = None
+
+
+class ScheduleIn(BaseModel):
+    """A signup sheet's slots: one or more recurring shifts, each with the same set of roles."""
+    starts_at: datetime
+    ends_at: datetime
+    location: str = ""
+    roles: list[SlotRoleIn] = Field(min_length=1)
+    repeat: str = "none"          # none | daily | weekly | biweekly
+    count: int = Field(default=1, ge=1, le=52)
+
+
+@router.post("/coordinator/events/{event_id}/schedule", status_code=201)
+def create_schedule(event_id: int, payload: ScheduleIn, db: Session = Depends(get_db),
+                    principal: Principal = Depends(require_permission("shift.manage"))):
+    """Generate a set of tunable, recurring signup slots for an event in one action."""
+    _enforce_scope(db, principal, "shift.manage",
+                   _program_of_event(db, principal.org_id, event_id))
+    try:
+        shifts = service.create_recurring_shifts(
+            db, org_id=principal.org_id, event_id=event_id, starts_at=payload.starts_at,
+            ends_at=payload.ends_at, location=payload.location,
+            roles=[r.model_dump() for r in payload.roles], repeat=payload.repeat,
+            count=payload.count)
+    except SchedulingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return {"created": len(shifts), "shift_ids": [s.id for s in shifts]}
+
+
 @router.get("/coordinator/metrics/staffing")
 def staffing(db: Session = Depends(get_db),
              principal: Principal = Depends(require_permission("report.view_staffing"))):

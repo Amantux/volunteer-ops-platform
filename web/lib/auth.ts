@@ -222,6 +222,54 @@ export function getBoard(): Promise<BoardEvent[]> {
   return authGet<BoardEvent[]>('/coordinator/board');
 }
 
+// Recurrence cadence for the slot builder. `none` produces a single slot.
+export type ScheduleRepeat = 'none' | 'daily' | 'weekly' | 'biweekly';
+
+// One role row in the slot builder, e.g. { name: 'Greeter', capacity: 4 }.
+export interface ScheduleRole {
+  name: string;
+  capacity: number;
+}
+
+// The recurring-slot builder payload. Times are ISO 8601; the server
+// re-validates (end after start, at least one role, count 1..52).
+export interface ScheduleInput {
+  starts_at: string;
+  ends_at: string;
+  location: string;
+  roles: ScheduleRole[];
+  repeat: ScheduleRepeat;
+  count: number;
+}
+
+export interface ScheduleResult {
+  created: number;
+  shift_ids: number[];
+}
+
+// Create a signup sheet (event). `is_public` sheets surface on the public
+// Opportunities / Calendar pages.
+export function createEvent(input: {
+  title: string;
+  description?: string;
+  kind?: string;
+  is_public?: boolean;
+}): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/coordinator/events', input);
+}
+
+// Generate one or more time slots (shifts) for an event from the recurring
+// builder. Returns how many were created and their ids.
+export function createSchedule(
+  eventId: number,
+  input: ScheduleInput,
+): Promise<ScheduleResult> {
+  return authPost<ScheduleResult>(
+    `/coordinator/events/${eventId}/schedule`,
+    input,
+  );
+}
+
 export function getStaffing(): Promise<Staffing> {
   return authGet<Staffing>('/coordinator/metrics/staffing');
 }
