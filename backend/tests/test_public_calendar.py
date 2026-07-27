@@ -10,12 +10,12 @@ from app.modules.scheduling import service
 
 def test_opportunities_lists_seeded_public_event(client):
     opps = client.get("/api/public/opportunities").json()
-    assert any(o["title"] == "Community Garden Workday" for o in opps)
-    garden = next(o for o in opps if o["title"] == "Community Garden Workday")
-    assert garden["shift_count"] >= 1
-    assert garden["shifts"][0]["open_roles"] >= 1
+    assert any(o["title"] == "Puppy Raiser Meet & Greet" for o in opps)
+    opp = next(o for o in opps if o["title"] == "Puppy Raiser Meet & Greet")
+    assert opp["shift_count"] >= 1
+    assert opp["shifts"][0]["open_roles"] >= 1
     # No volunteer PII leaks into the public payload.
-    assert "signups" not in garden and "volunteer" not in str(garden)
+    assert "signups" not in opp and "volunteer" not in str(opp)
 
 
 def test_non_public_event_is_hidden_from_public_surfaces(client, db, org):

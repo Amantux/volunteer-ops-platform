@@ -49,8 +49,8 @@ export default async function TrainingDetailPage({ params }: PageProps) {
           <strong>Something went wrong on our end.</strong>
           <p>
             Please try again in a moment. If it keeps happening, email{' '}
-            <a href="mailto:hello@riverside-volunteers.org">
-              hello@riverside-volunteers.org
+            <a href="mailto:contact@gofidog.org">
+              contact@gofidog.org
             </a>
             .
           </p>
