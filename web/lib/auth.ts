@@ -226,9 +226,12 @@ export function getBoard(): Promise<BoardEvent[]> {
 export type ScheduleRepeat = 'none' | 'daily' | 'weekly' | 'biweekly';
 
 // One role row in the slot builder, e.g. { name: 'Greeter', capacity: 4 }.
+// `required_qualification_type_id`, when set, restricts the role to volunteers
+// holding a current qualification of that type.
 export interface ScheduleRole {
   name: string;
   capacity: number;
+  required_qualification_type_id?: number;
 }
 
 // The recurring-slot builder payload. Times are ISO 8601; the server
@@ -288,6 +291,63 @@ export async function logHours(signupId: number, hours: number): Promise<void> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ signup_id: signupId, hours }),
   });
+}
+
+// Record a volunteer as a no-show for their claimed slot (terminal attendance
+// state). Requires `shift.record_attendance`.
+export function markNoShow(signupId: number): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/coordinator/no-show', {
+    signup_id: signupId,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Qualifications — coordinator-managed eligibility gates (perm shift.manage).
+// ---------------------------------------------------------------------------
+export interface QualificationType {
+  id: number;
+  key: string;
+  label: string;
+  validity_days: number | null;
+}
+
+export function listQualificationTypes(): Promise<QualificationType[]> {
+  return authGet<QualificationType[]>('/coordinator/qualification-types');
+}
+
+export function createQualificationType(input: {
+  key: string;
+  label: string;
+  validity_days?: number;
+}): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/coordinator/qualification-types', input);
+}
+
+// Grant a qualification type to a volunteer by email. The server returns a 400
+// (surfaced via ApiError.message) if the email isn't a volunteer.
+export function grantQualification(input: {
+  volunteer_email: string;
+  qualification_type_id: number;
+}): Promise<{ id: number }> {
+  return authPost<{ id: number }>('/coordinator/qualifications', input);
+}
+
+// ---------------------------------------------------------------------------
+// Reporting — hours & impact (perm report.view_staffing).
+// ---------------------------------------------------------------------------
+export interface HoursByVolunteer {
+  name: string;
+  hours: number;
+}
+
+export interface HoursReport {
+  total_hours: number;
+  volunteers: number;
+  by_volunteer: HoursByVolunteer[];
+}
+
+export function getHoursReport(): Promise<HoursReport> {
+  return authGet<HoursReport>('/coordinator/reports/hours');
 }
 
 // ---------------------------------------------------------------------------

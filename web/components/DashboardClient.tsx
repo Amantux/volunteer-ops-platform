@@ -113,6 +113,9 @@ export default function DashboardClient() {
           <Link className="btn btn-secondary" href="/admin/requests">
             Requests
           </Link>
+          <Link className="btn btn-secondary" href="/admin/reports">
+            Reports
+          </Link>
           <button type="button" className="btn btn-secondary" onClick={signOut}>
             Sign out
           </button>

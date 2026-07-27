@@ -8,6 +8,7 @@ import {
   getBoard,
   getStaffing,
   logHours,
+  markNoShow,
   type BoardEvent,
   type BoardSignup,
   type Staffing,
@@ -17,6 +18,13 @@ import {
 // the check-in / log-hours controls. (Status strings come from the backend.)
 function isAttended(status: string): boolean {
   return status.trim().toLowerCase() === 'attended';
+}
+
+// A no-show is a terminal attendance state: controls are hidden and a pill is
+// shown instead. Backend statuses vary in spelling, so normalise defensively.
+function isNoShow(status: string): boolean {
+  const s = status.trim().toLowerCase().replace(/[\s-]/g, '_');
+  return s === 'no_show' || s === 'noshow';
 }
 
 export default function CoordinatorPanel() {
@@ -87,6 +95,24 @@ export default function CoordinatorPanel() {
         err instanceof ApiError
           ? err.message
           : 'We couldn’t log these hours. Please try again.',
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onNoShow(signupId: number) {
+    clearRowError(signupId);
+    setBusyId(signupId);
+    try {
+      await markNoShow(signupId);
+      await load();
+    } catch (err) {
+      setRowError(
+        signupId,
+        err instanceof ApiError
+          ? err.message
+          : 'We couldn’t mark this volunteer as a no-show. Please try again.',
       );
     } finally {
       setBusyId(null);
@@ -212,6 +238,7 @@ export default function CoordinatorPanel() {
                             onLogHours={(hours) =>
                               onLogHours(su.signup_id, hours)
                             }
+                            onNoShow={() => onNoShow(su.signup_id)}
                           />
                         ))}
                       </ul>
@@ -232,17 +259,20 @@ function SignupRow({
   error,
   onCheckin,
   onLogHours,
+  onNoShow,
 }: {
   signup: BoardSignup;
   busy: boolean;
   error?: string;
   onCheckin: () => void;
   onLogHours: (hours: number) => void;
+  onNoShow: () => void;
 }) {
   const hoursId = useId();
   const [hours, setHours] = useState('');
   const [hoursError, setHoursError] = useState('');
   const attended = isAttended(signup.status);
+  const noShow = isNoShow(signup.status);
 
   function submitHours(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -259,10 +289,14 @@ function SignupRow({
     <li className="signup-row">
       <div className="signup-main">
         <span className="signup-name">{signup.volunteer}</span>
-        <span className="muted signup-status">{signup.status}</span>
+        {noShow ? (
+          <span className="pill pill-danger">No-show</span>
+        ) : (
+          <span className="muted signup-status">{signup.status}</span>
+        )}
       </div>
 
-      {!attended && (
+      {!attended && !noShow && (
         <div className="signup-actions">
           <button
             type="button"
@@ -298,6 +332,15 @@ function SignupRow({
               {busy ? 'Saving…' : 'Log hours'}
             </button>
           </form>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onNoShow}
+            disabled={busy}
+          >
+            {busy ? 'Working…' : 'Mark no-show'}
+          </button>
         </div>
       )}
 
