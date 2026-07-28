@@ -13,6 +13,7 @@ from app.api import (
     auth,
     comms,
     content,
+    dashboard,
     donations,
     forms,
     ops,
@@ -110,6 +111,7 @@ app.include_router(scheduling.router)
 app.include_router(people.router)
 app.include_router(donations.public_router)
 app.include_router(donations.admin_router)
+app.include_router(dashboard.router)
 app.include_router(comms.router)
 app.include_router(content.admin_router)
 app.include_router(content.public_router)

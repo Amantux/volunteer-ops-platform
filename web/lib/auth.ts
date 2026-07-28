@@ -439,6 +439,33 @@ export function getHoursReport(): Promise<HoursReport> {
 }
 
 // ---------------------------------------------------------------------------
+// Executive overview — org-wide snapshot (perm report.view_staffing).
+// `donations` is present ONLY when the caller also holds `donation.view`, so it
+// is optional; amounts inside are integer minor units (see lib/money.ts).
+// ---------------------------------------------------------------------------
+export interface OverviewDonations {
+  volume_minor_units: number;
+  donation_count: number;
+  donor_count: number;
+  average_minor_units: number;
+  refunded_minor_units: number;
+  active_recurring_plans: number;
+  recurring_mrr_minor_units: number;
+}
+
+export interface OverviewData {
+  active_volunteers: number;
+  upcoming_shifts_7d: number;
+  applications_by_state: Record<string, number>;
+  approved_hours: number;
+  donations?: OverviewDonations;
+}
+
+export function getOverview(): Promise<OverviewData> {
+  return authGet<OverviewData>('/admin/overview');
+}
+
+// ---------------------------------------------------------------------------
 // CMS site builder (admin)
 // ---------------------------------------------------------------------------
 export interface AdminPage {
