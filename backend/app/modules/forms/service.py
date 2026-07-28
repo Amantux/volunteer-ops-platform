@@ -156,8 +156,15 @@ def _send_ack(db: Session, *, org_id: int, definition: FormDefinition,
     if not (definition.ack_template_key and definition.ack_recipient_field):
         return
     recipient = submission.answers.get(definition.ack_recipient_field)
-    if not recipient or not isinstance(recipient, str):
+    if not isinstance(recipient, str) or "@" not in recipient:
+        return  # only ack a plausible email address the submitter supplied
+    # Per-recipient throttle: a public form could otherwise be POSTed repeatedly with a victim's
+    # address to email-bomb them (the per-IP form limit doesn't stop a distributed sender). Cap
+    # acks to any single address; idempotency per submission already stops same-submission dupes.
+    from app.core import ratelimit
+    if not ratelimit.allow(f"form-ack:{recipient.lower()}", limit=3, window_seconds=3600):
         return
+
     from app.modules.communications.service import queue_email
 
     queue_email(db, org_id=org_id, idempotency_key=f"form-ack:{submission.id}",

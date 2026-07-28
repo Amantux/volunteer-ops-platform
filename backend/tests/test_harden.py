@@ -41,6 +41,33 @@ def test_form_ack_emails_the_submitter_on_submit(db, org, client):
     assert any(m.to_email == "subscriber@x.org" for m in inbox(db, org.id))
 
 
+def test_ack_email_is_capped_per_recipient(db, org, client):
+    """Repeated submissions naming the same address can't email-bomb it (per-recipient cap)."""
+    from app.core import ratelimit
+    from app.modules.communications.models import EmailTemplate
+    from app.modules.forms.service import (
+        create_definition,
+        create_draft_version,
+        publish_version,
+    )
+    ratelimit._hits.clear()
+    db.add(EmailTemplate(org_id=org.id, key="ack2", subject="Thanks", body_text="ok {{form}}"))
+    d = create_definition(db, org_id=org.id, key="signup2", name="Signup 2",
+                          default_visibility="public", ack_template_key="ack2",
+                          ack_recipient_field="email")
+    v = create_draft_version(db, org_id=org.id, def_id=d.id, schema={"fields": [
+        {"key": "email", "type": "text", "label": "Email", "visibility": "public",
+         "validation": {"required": True}}]})
+    publish_version(db, org_id=org.id, def_id=d.id, version=v.version, actor_user_id=None)
+    db.commit()
+
+    for _ in range(5):
+        client.post("/api/forms/signup2/submissions", json={"answers": {"email": "victim@x.org"}})
+    relay(db)
+    acks = [m for m in inbox(db, org.id) if m.to_email == "victim@x.org"]
+    assert len(acks) == 3  # capped at the per-recipient limit despite 5 submissions
+
+
 def test_form_without_ack_config_sends_nothing(db, org, client):
     # The incident form has no ack config → a submission queues no acknowledgement.
     before = len(inbox(db, org.id))

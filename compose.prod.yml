@@ -70,15 +70,22 @@ services:
     volumes: [vop_backups:/backups]
     # Nightly pg_dump to a durable volume; keep the most recent 14. Restore with:
     #   gunzip -c /backups/<file>.sql.gz | psql -h postgres -U "$POSTGRES_USER" "$POSTGRES_DB"
+    # NOTE: dump to a temp file and check pg_dump's OWN exit status BEFORE gzip+rotate. A naive
+    # `pg_dump | gzip > f` hides pg_dump failures (pipeline status is gzip's) and would rotate away
+    # good backups after silently writing empty ones.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         while true; do
           ts=$$(date +%Y%m%d_%H%M%S)
-          PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h postgres -U "$$POSTGRES_USER" "$$POSTGRES_DB" \
-            | gzip > "/backups/vop_$$ts.sql.gz" && echo "backup vop_$$ts.sql.gz" \
-            || echo "backup FAILED at $$ts"
-          ls -1t /backups/*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm -f
+          tmp="/backups/.vop_$$ts.sql"
+          if PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h postgres -U "$$POSTGRES_USER" "$$POSTGRES_DB" > "$$tmp"; then
+            gzip "$$tmp" && mv "$$tmp.gz" "/backups/vop_$$ts.sql.gz" && echo "backup vop_$$ts.sql.gz"
+            # Rotate ONLY after a confirmed-good backup, so failures never purge good ones.
+            ls -1t /backups/vop_*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm -f
+          else
+            echo "backup FAILED at $$ts"; rm -f "$$tmp"
+          fi
           sleep 86400
         done
     depends_on:

@@ -474,12 +474,17 @@ def export_rows(db: Session, *, org_id: int) -> str:
     return buf.getvalue()
 
 
-def expire_stale_pending_donations(db: Session, *, older_than_hours: int = 24) -> int:
-    """Reconcile drift: a `pending` donation whose webhook never arrived within the window is an
-    abandoned checkout — mark it `failed` so it stops counting as in-flight. Safe because money
-    state only ever advances via a verified webhook (INV-WEBHOOK-AUTHORITATIVE); a genuinely paid
-    donation would already be `succeeded`. (With live Stripe, a stricter version would re-query the
-    intent before failing; the abandoned-checkout case is the common one and this is conservative.)
+def expire_stale_pending_donations(db: Session, *, older_than_hours: int = 240) -> int:
+    """Reconcile drift: a `pending` donation still unsettled long past any legitimate settlement
+    window is an abandoned checkout — mark it `failed` so it stops counting as in-flight.
+
+    The window is deliberately wide (default 10 days): delayed-notification methods (ACH/SEPA/OXXO)
+    legitimately sit `pending` for several business days before `async_payment_succeeded` settles
+    them, so a short window would fail real in-flight donations. This is self-healing regardless —
+    a later verified success reconciles `failed → succeeded` (`_mark_succeeded` only short-circuits
+    on already-`succeeded`) — but we keep the window past ACH so a paying donor is never shown
+    `failed` in the interim. (With live Stripe, a stricter version would re-query the intent before
+    failing; card checkouts that never settle are the common abandoned case and this is conservative.)
     """
     cutoff = utcnow() - timedelta(hours=older_than_hours)
     stale = db.scalars(select(Donation).where(
