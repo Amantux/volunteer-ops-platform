@@ -27,12 +27,16 @@ services:
       VOP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-vop}:${POSTGRES_PASSWORD:-vop}@postgres:5432/${POSTGRES_DB:-vop}
       VOP_REDIS_URL: redis://redis:6379/0
       VOP_APP_SECRET: ${VOP_APP_SECRET:-change-me-in-prod}
-      VOP_BOOTSTRAP_ORG_NAME: ${VOP_BOOTSTRAP_ORG_NAME:-Community Volunteers}
-      VOP_BOOTSTRAP_ADMIN_EMAIL: ${VOP_BOOTSTRAP_ADMIN_EMAIL:-admin@example.org}
+      # This is the GOFI deployment branch — dev defaults boot the GOFI instance and seed its
+      # programs/qualifications/application/campaign (VOP_SEED_ORG_CONTENT).
+      VOP_BOOTSTRAP_ORG_NAME: ${VOP_BOOTSTRAP_ORG_NAME:-Golden Opportunities for Independence}
+      VOP_BOOTSTRAP_ORG_SLUG: ${VOP_BOOTSTRAP_ORG_SLUG:-gofidog}
+      VOP_BOOTSTRAP_ADMIN_EMAIL: ${VOP_BOOTSTRAP_ADMIN_EMAIL:-admin@gofidog.org}
+      VOP_SEED_ORG_CONTENT: ${VOP_SEED_ORG_CONTENT:-true}
       VOP_PUBLIC_BASE_URL: ${VOP_PUBLIC_BASE_URL:-http://localhost:3000}
       # Real email: set VOP_EMAIL_PROVIDER=smtp + SMTP_* (Postmark/SES). Default: dev inbox.
       VOP_EMAIL_PROVIDER: ${VOP_EMAIL_PROVIDER:-inbox}
-      VOP_EMAIL_FROM: ${VOP_EMAIL_FROM:-Community Volunteers <no-reply@example.org>}
+      VOP_EMAIL_FROM: ${VOP_EMAIL_FROM:-Golden Opportunities for Independence <no-reply@gofidog.org>}
       VOP_SMTP_HOST: ${VOP_SMTP_HOST:-}
       VOP_SMTP_PORT: ${VOP_SMTP_PORT:-587}
       VOP_SMTP_USERNAME: ${VOP_SMTP_USERNAME:-}
