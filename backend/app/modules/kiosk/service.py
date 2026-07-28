@@ -23,6 +23,19 @@ class KioskError(Exception):
     pass
 
 
+class KioskNotFound(KioskError):
+    """A bad/inactive token or missing kiosk — maps to 404, distinct from a 400 misuse."""
+
+
+def _assert_program_in_org(db: Session, org_id: int, program_id: int | None) -> None:
+    if program_id is None:
+        return
+    from app.modules.org.models import Program
+    p = db.get(Program, program_id)
+    if p is None or p.org_id != org_id:
+        raise KioskError("program not found")
+
+
 # --- Admin CRUD -------------------------------------------------------------- #
 
 def create_kiosk(db: Session, *, org_id: int, name: str, mode: str = "display",
@@ -35,6 +48,7 @@ def create_kiosk(db: Session, *, org_id: int, name: str, mode: str = "display",
         raise KioskError("mode must be 'shared' or 'display'")
     if db.scalar(select(Kiosk).where(Kiosk.org_id == org_id, Kiosk.name == name)) is not None:
         raise KioskError("a kiosk with that name already exists")
+    _assert_program_in_org(db, org_id, program_id)
     kiosk = Kiosk(org_id=org_id, name=name, token=secrets.token_urlsafe(24), mode=mode,
                   program_id=program_id, location=location,
                   panels=_validate_panels(panels) if panels is not None else list(_DEFAULT_PANELS))
@@ -56,9 +70,16 @@ def _validate_panels(panels: list) -> list:
 def update_kiosk(db: Session, *, org_id: int, kiosk_id: int, **fields) -> Kiosk:
     kiosk = db.get(Kiosk, kiosk_id)
     if kiosk is None or kiosk.org_id != org_id:
-        raise KioskError("kiosk not found")
+        raise KioskNotFound("kiosk not found")
     if "mode" in fields and fields["mode"] not in ("shared", "display"):
         raise KioskError("mode must be 'shared' or 'display'")
+    if fields.get("name"):
+        clash = db.scalar(select(Kiosk).where(Kiosk.org_id == org_id, Kiosk.name == fields["name"],
+                                              Kiosk.id != kiosk_id))
+        if clash is not None:
+            raise KioskError("a kiosk with that name already exists")
+    if fields.get("program_id") is not None:
+        _assert_program_in_org(db, org_id, fields["program_id"])
     if "panels" in fields and fields["panels"] is not None:
         fields["panels"] = _validate_panels(fields["panels"])
     for k, v in fields.items():
@@ -80,7 +101,7 @@ def get_by_name(db: Session, *, org_id: int, name: str) -> Kiosk | None:
 def _by_token(db: Session, token: str) -> Kiosk:
     kiosk = db.scalar(select(Kiosk).where(Kiosk.token == token, Kiosk.is_active.is_(True)))
     if kiosk is None:
-        raise KioskError("kiosk not found")
+        raise KioskNotFound("kiosk not found")
     return kiosk
 
 

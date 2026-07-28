@@ -116,6 +116,30 @@ def test_task_toggle_is_per_day(db, org, client):
     assert off["done"] is False
 
 
+def test_checkin_rejects_signup_outside_kiosk_program(db, org, client):
+    from app.modules.org.models import Program
+    prog_b = Program(org_id=org.id, key="prog_b", name="Program B")
+    db.add(prog_b)
+    db.flush()
+    prog_a = Program(org_id=org.id, key="prog_a", name="Program A")
+    db.add(prog_a)
+    db.commit()
+    # A signup lives on a program-less event today (helper), but the kiosk is scoped to program A.
+    signup = _volunteer_signup_today(db, org)
+    k = service.create_kiosk(db, org_id=org.id, name="Prog A Desk", mode="shared",
+                             program_id=prog_a.id, panels=[{"type": "checkin"}])
+    db.commit()
+    r = client.post(f"/api/kiosk/{k.token}/checkin", json={"signup_id": signup.id})
+    assert r.status_code == 400  # not one of this program-scoped kiosk's signups today
+
+
+def test_rename_to_existing_name_is_400_not_500(db, org, client, admin_headers):
+    a = client.post("/api/admin/kiosks", headers=admin_headers, json={"name": "Alpha"}).json()["id"]
+    client.post("/api/admin/kiosks", headers=admin_headers, json={"name": "Beta"})
+    r = client.patch(f"/api/admin/kiosks/{a}", headers=admin_headers, json={"name": "Beta"})
+    assert r.status_code == 400
+
+
 # --- MCP: name-addressable ---------------------------------------------------- #
 
 def test_mcp_kiosk_tools_by_name(db, org, admin_user):

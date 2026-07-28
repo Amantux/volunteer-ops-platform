@@ -71,6 +71,8 @@ def update_kiosk(kiosk_id: int, payload: KioskPatch, db: Session = Depends(get_d
     try:
         k = service.update_kiosk(db, org_id=principal.org_id, kiosk_id=kiosk_id,
                                  **payload.model_dump(exclude_unset=True))
+    except service.KioskNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except service.KioskError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
@@ -104,8 +106,11 @@ def add_task(kiosk_id: int, payload: TaskIn, db: Session = Depends(get_db),
 # --- Device (token-authenticated) ------------------------------------------- #
 
 def _device_limit(request: Request, token: str) -> None:
+    # Key on IP only: including the (attacker-controlled) token would give every distinct-token
+    # probe a fresh bucket, defeating enumeration throttling. Token entropy (192 bits) is the real
+    # brute-force defense; this bounds per-IP request volume.
     client = request.client.host if request.client else "unknown"
-    if not ratelimit.allow(f"kiosk:{token[:12]}:{client}", limit=120, window_seconds=60):
+    if not ratelimit.allow(f"kiosk-ip:{client}", limit=120, window_seconds=60):
         raise HTTPException(status_code=429, detail="Too many requests.")
 
 
@@ -127,6 +132,8 @@ def kiosk_checkin(token: str, payload: CheckinIn, request: Request, db: Session 
     _device_limit(request, token)
     try:
         result = service.kiosk_checkin(db, token=token, signup_id=payload.signup_id)
+    except service.KioskNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except service.KioskError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
@@ -138,6 +145,8 @@ def kiosk_toggle_task(token: str, task_id: int, request: Request, db: Session = 
     _device_limit(request, token)
     try:
         result = service.toggle_task(db, token=token, task_id=task_id)
+    except service.KioskNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except service.KioskError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()
