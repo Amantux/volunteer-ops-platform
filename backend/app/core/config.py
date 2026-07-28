@@ -63,7 +63,9 @@ class Settings(BaseSettings):
     llm_model: str = ""
 
     # Chat assistant defaults (per-org overrides live in OrganizationSetting["assistant"], set by
-    # admins in the UI; overrides win). "off" disables chat. Providers: off | ollama | anthropic.
+    # admins in the UI; overrides win). "off" disables chat.
+    # Providers: off | ollama (local or cloud) | openai (any OpenAI-compatible API, incl. Ollama
+    # Cloud/OpenRouter/LiteLLM — set base_url to the API root + an api_key) | anthropic.
     # The assistant is governed: it reads/drafts and files approval proposals — it never
     # auto-executes send/publish/refund/delete (R4). Card entry etc. stays human-gated.
     assistant_provider: str = "off"

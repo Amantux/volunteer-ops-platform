@@ -4,15 +4,12 @@ to configure the per-org provider (Ollama/Anthropic). The assistant is read-only
 
 from __future__ import annotations
 
-import ipaddress
 import json
-import socket
-import urllib.parse
 import urllib.request
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core import ratelimit
@@ -26,11 +23,13 @@ router = APIRouter(prefix="/api", tags=["assistant"])
 
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    content: str = Field(max_length=8000)
 
 
 class ChatIn(BaseModel):
-    messages: list[ChatMessage]
+    # Bound the body: server also keeps only the last 20 messages, but cap here so a giant payload
+    # can't be parsed/copied first.
+    messages: list[ChatMessage] = Field(max_length=100)
 
 
 @router.get("/agent/config")
@@ -57,26 +56,7 @@ def agent_chat(payload: ChatIn, request: Request, db: Session = Depends(get_db),
 
 # --- Admin configuration --------------------------------------------------------------- #
 
-def _safe_base_url(url: str) -> bool:
-    """Allow http(s) to loopback/LAN (where Ollama runs) but block link-local/metadata targets —
-    the base URL is admin-supplied and used server-side (SSRF guard)."""
-    if not url:
-        return True  # empty = fall back to env default
-    if not url.startswith(("http://", "https://")):
-        return False
-    host = urllib.parse.urlparse(url).hostname
-    if not host:
-        return False
-    try:
-        for res in socket.getaddrinfo(host, None):
-            ip = ipaddress.ip_address(res[4][0])
-            if ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
-                return False  # block metadata/link-local (e.g. 169.254.169.254)
-    except OSError:
-        # Unresolvable now (e.g. host.docker.internal outside Docker) — can't be a metadata target;
-        # admin-supplied and validated again at call time. Allow (semi-trusted admin stance).
-        return True
-    return True
+_PROVIDERS = ("off", "ollama", "openai", "anthropic")
 
 
 class AgentSettingsIn(BaseModel):
@@ -99,9 +79,9 @@ def get_agent_settings(db: Session = Depends(get_db),
 def put_agent_settings(payload: AgentSettingsIn, db: Session = Depends(get_db),
                        principal: Principal = Depends(require_permission("assistant.configure"))):
     patch = payload.model_dump(exclude_none=True)
-    if "provider" in patch and patch["provider"] not in ("off", "ollama", "anthropic"):
+    if "provider" in patch and patch["provider"] not in _PROVIDERS:
         raise HTTPException(status_code=400, detail="invalid provider")
-    if "base_url" in patch and not _safe_base_url(patch["base_url"]):
+    if "base_url" in patch and not assistant.is_safe_url(patch["base_url"]):
         raise HTTPException(status_code=400, detail="base_url must be http(s) to a permitted host")
     assistant.set_org_config(db, principal.org_id, patch)
     db.commit()
@@ -111,16 +91,21 @@ def put_agent_settings(payload: AgentSettingsIn, db: Session = Depends(get_db),
 @router.post("/admin/agent-settings/models")
 def list_models(db: Session = Depends(get_db),
                 principal: Principal = Depends(require_permission("assistant.configure"))):
-    """Probe the configured provider for its installed models (populates the admin dropdown)."""
+    """Probe the configured provider for its installed models (populates the admin dropdown).
+    Ollama → /api/tags; OpenAI-style → /v1/models (both with the API key when set)."""
     cfg = assistant.resolve_config(db, principal.org_id)
-    if cfg.provider == "ollama" and cfg.base_url:
-        if not _safe_base_url(cfg.base_url):
-            raise HTTPException(status_code=400, detail="base_url not permitted")
-        try:
-            req = urllib.request.Request(cfg.base_url.rstrip("/") + "/api/tags")
-            with urllib.request.urlopen(req, timeout=cfg.timeout) as r:  # noqa: S310  # nosec B310
-                data = json.loads(r.read().decode())
-            return {"models": [m.get("name") for m in data.get("models", [])]}
-        except Exception as exc:  # noqa: BLE001 - surface a friendly error to the settings UI
-            raise HTTPException(status_code=502, detail=f"could not reach Ollama: {exc}") from exc
-    return {"models": []}
+    if cfg.provider not in ("ollama", "openai") or not cfg.base_url:
+        return {"models": []}
+    if not assistant.is_safe_url(cfg.base_url):
+        raise HTTPException(status_code=400, detail="base_url not permitted")
+    path = "/api/tags" if cfg.provider == "ollama" else "/models"
+    headers = {"Authorization": f"Bearer {cfg.api_key}"} if cfg.api_key else {}
+    try:
+        req = urllib.request.Request(cfg.base_url.rstrip("/") + path, headers=headers)
+        with assistant._guarded_open(req, timeout=cfg.timeout) as r:
+            data = json.loads(r.read().decode())
+    except Exception as exc:  # noqa: BLE001 - generic error; don't leak internal reachability
+        raise HTTPException(status_code=502, detail="Could not reach the model provider.") from exc
+    if cfg.provider == "ollama":
+        return {"models": [m.get("name") for m in data.get("models", [])]}
+    return {"models": [m.get("id") for m in data.get("data", [])]}

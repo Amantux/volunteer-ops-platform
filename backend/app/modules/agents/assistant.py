@@ -14,7 +14,10 @@ Config (per-org override in OrganizationSetting["assistant"] wins over env defau
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import socket
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -26,6 +29,59 @@ from app.core import audit
 from app.core.authz import Principal, has_permission
 from app.core.config import settings
 from app.modules.org.models import OrganizationSetting
+
+# Known cloud metadata endpoints (169.254.169.254 is link-local; 100.100.100.200 is Alibaba and
+# is NOT link-local, so deny it explicitly). Loopback/LAN are intentionally allowed (Ollama).
+_METADATA_IPS = {"169.254.169.254", "100.100.100.200"}
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse to follow redirects — otherwise a validated base_url could 302 to cloud metadata."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def is_safe_url(url: str) -> bool:
+    """SSRF guard for the admin-supplied LLM base URL: http(s) only, never a metadata/link-local
+    target. Loopback/LAN allowed (Ollama). Unresolvable = allowed (can't be a metadata target;
+    re-checked at call time). Residual DNS-rebinding is accepted (semi-trusted admin)."""
+    if not url:
+        return True
+    if not url.startswith(("http://", "https://")):
+        return False
+    host = urllib.parse.urlparse(url).hostname
+    if not host:
+        return False
+    try:
+        for res in socket.getaddrinfo(host, None):
+            addr = res[4][0]
+            if addr in _METADATA_IPS:
+                return False
+            ip = ipaddress.ip_address(addr)
+            if ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+                return False
+    except OSError:
+        return True
+    return True
+
+
+def _guarded_open(req: urllib.request.Request, *, timeout: int):
+    """Validate the URL and open it with redirects disabled (SSRF-safe) on every call — not just at
+    config-save time."""
+    if not is_safe_url(req.full_url):
+        raise AssistantError("blocked URL")
+    return _OPENER.open(req, timeout=timeout)  # noqa: S310  # nosec B310
+
+
+def _as_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 _SYSTEM_PROMPT = (
     "You are the volunteer-operations assistant for this organization. Help signed-in staff and "
@@ -74,8 +130,9 @@ def resolve_config(db: Session, org_id: int) -> AssistantConfig:
         model=pick("model", settings.assistant_model),
         api_key=pick("api_key", settings.assistant_api_key),
         system_prompt=pick("system_prompt", _SYSTEM_PROMPT),
-        timeout=int(pick("timeout", settings.assistant_timeout)),
-        max_steps=int(pick("max_steps", settings.assistant_max_steps)),
+        timeout=_as_int(pick("timeout", settings.assistant_timeout), settings.assistant_timeout),
+        max_steps=_as_int(pick("max_steps", settings.assistant_max_steps),
+                          settings.assistant_max_steps),
     )
 
 
@@ -179,7 +236,7 @@ def _post_json(url: str, payload: dict, headers: dict, timeout: int) -> dict:
     data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json",
                                                           **headers}, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310  # nosec B310
+    with _guarded_open(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode())
 
 
@@ -209,6 +266,8 @@ def run_chat(db: Session, principal: Principal, messages: list[dict]) -> ChatRes
     try:
         if cfg.provider == "ollama":
             reply = _loop_ollama(db, principal, cfg, convo, tools, actions)
+        elif cfg.provider == "openai":
+            reply = _loop_openai(db, principal, cfg, convo, tools, actions)
         else:
             reply = _loop_anthropic(db, principal, cfg, convo, tools, actions)
     except AssistantError:
@@ -266,7 +325,7 @@ def _stream_ollama(db, principal, cfg: AssistantConfig, convo: list[dict],
                                      method="POST")
         content_parts: list[str] = []
         tool_calls: list[dict] = []
-        with urllib.request.urlopen(req, timeout=cfg.timeout) as resp:  # noqa: S310  # nosec B310
+        with _guarded_open(req, timeout=cfg.timeout) as resp:
             for raw in resp:
                 line = raw.strip()
                 if not line:
@@ -343,6 +402,36 @@ def _loop_ollama(db, principal, cfg: AssistantConfig, convo: list[dict],
                     args = {}
             out = _run_tool(db, principal, tools, fn.get("name", ""), args, actions)
             convo.append({"role": "tool", "content": out})
+    return "I wasn't able to complete that in a few steps — try rephrasing."
+
+
+def _loop_openai(db, principal, cfg: AssistantConfig, convo: list[dict],
+                 tools: dict[str, ChatTool], actions: list[dict]) -> str:
+    """OpenAI-compatible chat (OpenAI, Ollama Cloud, OpenRouter, LiteLLM, vLLM, ...). base_url
+    should include the API root (e.g. https://api.openai.com/v1). Bearer key when set."""
+    url = cfg.base_url.rstrip("/") + "/chat/completions"
+    headers = {"Authorization": f"Bearer {cfg.api_key}"} if cfg.api_key else {}
+    specs = _openai_tool_specs(tools)
+    for _ in range(cfg.max_steps):
+        body: dict = {"model": cfg.model, "messages": convo}
+        if specs:
+            body["tools"] = specs
+        data = _post_json(url, body, headers, cfg.timeout)
+        msg = data["choices"][0]["message"]
+        tool_calls = msg.get("tool_calls") or []
+        if not tool_calls:
+            return (msg.get("content") or "").strip()
+        convo.append(msg)
+        for tc in tool_calls:
+            fn = tc.get("function", {})
+            args = fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+            out = _run_tool(db, principal, tools, fn.get("name", ""), args, actions)
+            convo.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": out})
     return "I wasn't able to complete that in a few steps — try rephrasing."
 
 

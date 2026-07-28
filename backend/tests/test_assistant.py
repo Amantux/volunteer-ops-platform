@@ -78,6 +78,16 @@ def test_admin_can_configure_and_key_not_echoed(db, org, client, admin_headers):
     assert "topsecret" not in r.text
 
 
+def test_openai_style_provider_is_accepted(db, org, client, admin_headers):
+    r = client.put("/api/admin/agent-settings", headers=admin_headers, json={
+        "provider": "openai", "base_url": "https://openrouter.ai/api/v1",
+        "model": "gpt-4o-mini", "api_key": "sk-test"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["provider"] == "openai" and body["has_api_key"] is True
+    assert "sk-test" not in r.text
+
+
 def test_ssrf_guard_rejects_metadata_and_bad_scheme(db, org, client, admin_headers):
     bad = client.put("/api/admin/agent-settings", headers=admin_headers,
                      json={"base_url": "http://169.254.169.254"})
