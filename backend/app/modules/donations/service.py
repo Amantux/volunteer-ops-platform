@@ -15,7 +15,7 @@ from __future__ import annotations
 import csv
 import io
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -472,3 +472,21 @@ def export_rows(db: Session, *, org_id: int) -> str:
                     receipt_number or "", f"donor#{d.donor_id}" if d.donor_id else "anonymous",
                     d.status.value])
     return buf.getvalue()
+
+
+def expire_stale_pending_donations(db: Session, *, older_than_hours: int = 24) -> int:
+    """Reconcile drift: a `pending` donation whose webhook never arrived within the window is an
+    abandoned checkout — mark it `failed` so it stops counting as in-flight. Safe because money
+    state only ever advances via a verified webhook (INV-WEBHOOK-AUTHORITATIVE); a genuinely paid
+    donation would already be `succeeded`. (With live Stripe, a stricter version would re-query the
+    intent before failing; the abandoned-checkout case is the common one and this is conservative.)
+    """
+    cutoff = utcnow() - timedelta(hours=older_than_hours)
+    stale = db.scalars(select(Donation).where(
+        Donation.status == DonationStatus.pending, Donation.created_at < cutoff)).all()
+    for d in stale:
+        d.status = DonationStatus.failed
+        audit.emit(db, org_id=d.org_id, action="donation.expired_pending", target_type="donation",
+                   target_id=d.id)
+    db.flush()
+    return len(stale)

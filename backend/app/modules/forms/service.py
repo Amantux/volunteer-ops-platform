@@ -45,12 +45,14 @@ def _definition_by_id(db: Session, org_id: int, def_id: int) -> FormDefinition:
 
 
 def create_definition(db: Session, *, org_id: int, key: str, name: str, purpose: str = "",
-                      default_visibility: str = "internal", workflow_key: str = "") -> FormDefinition:
+                      default_visibility: str = "internal", workflow_key: str = "",
+                      ack_template_key: str = "", ack_recipient_field: str = "") -> FormDefinition:
     if db.scalar(select(FormDefinition).where(
             FormDefinition.org_id == org_id, FormDefinition.key == key)) is not None:
         raise FormError("a form with that key already exists")
     d = FormDefinition(org_id=org_id, key=key, name=name, purpose=purpose,
-                       default_visibility=Visibility(default_visibility), workflow_key=workflow_key)
+                       default_visibility=Visibility(default_visibility), workflow_key=workflow_key,
+                       ack_template_key=ack_template_key, ack_recipient_field=ack_recipient_field)
     db.add(d)
     db.flush()
     return d
@@ -143,7 +145,24 @@ def submit(db: Session, *, org_id: int, key: str, answers: dict,
             subject_id=sub.id, actor_id=str(submitter_user_id or ""))
         sub.workflow_instance_id = inst.id
         db.flush()
+    _send_ack(db, org_id=org_id, definition=d, submission=sub)
     return sub
+
+
+def _send_ack(db: Session, *, org_id: int, definition: FormDefinition,
+              submission: FormSubmission) -> None:
+    """Acknowledge the submitter as soon as they submit, if the form is configured for it. Goes
+    through the outbox and is idempotent per submission (a retry never double-sends)."""
+    if not (definition.ack_template_key and definition.ack_recipient_field):
+        return
+    recipient = submission.answers.get(definition.ack_recipient_field)
+    if not recipient or not isinstance(recipient, str):
+        return
+    from app.modules.communications.service import queue_email
+
+    queue_email(db, org_id=org_id, idempotency_key=f"form-ack:{submission.id}",
+                to_email=recipient, template_key=definition.ack_template_key,
+                context={"form": definition.name})
 
 
 def get_submission(db: Session, *, org_id: int, submission_id: int,
