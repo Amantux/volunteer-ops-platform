@@ -12,6 +12,7 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     Boolean,
+    Enum,
     ForeignKey,
     Integer,
     String,
@@ -61,7 +62,11 @@ class DonationCampaign(Base, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     goal_minor_units: Mapped[int | None] = mapped_column(Integer)  # None = open-ended
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
-    status: Mapped[CampaignStatus] = mapped_column(default=CampaignStatus.draft, nullable=False)
+    # Explicit type name: the default (class-name-derived) "campaignstatus" collides with the
+    # email CampaignStatus enum's Postgres type, which has different labels.
+    status: Mapped[CampaignStatus] = mapped_column(
+        Enum(CampaignStatus, name="donation_campaign_status"),
+        default=CampaignStatus.draft, nullable=False)
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     publish_progress: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     starts_at: Mapped[datetime | None] = mapped_column()
