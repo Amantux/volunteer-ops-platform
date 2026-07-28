@@ -1859,3 +1859,326 @@ main {
     animation: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Kiosks — admin manager
+--------------------------------------------------------------------------- */
+.kiosk-list {
+  display: grid;
+  gap: var(--space-6);
+}
+.kiosk-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.kiosk-card-title {
+  margin: 0 0 var(--space-2);
+}
+.kiosk-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.kiosk-url-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+.kiosk-url-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.kiosk-url {
+  flex: 1 1 260px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.95rem;
+}
+.kiosk-sub {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.kiosk-sub h4 {
+  margin: 0 0 var(--space-3);
+  font-size: 1rem;
+}
+.kiosk-panel-list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.kiosk-panel-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  flex-wrap: wrap;
+}
+.kiosk-panel-main {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.kiosk-fyi-fields {
+  margin-top: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+.kiosk-panel-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.kiosk-add-panel {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.kiosk-add-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.kiosk-task-list {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-6);
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* ---------------------------------------------------------------------------
+   Kiosk display — full-screen tablet signage. Overlays the site chrome so the
+   tablet shows only the kiosk. High-contrast, large type, big touch targets.
+--------------------------------------------------------------------------- */
+.kiosk-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow-y: auto;
+  background: #0b1220;
+  color: #f8fafc;
+  padding: clamp(16px, 3vw, 40px);
+  font-size: clamp(18px, 2.2vw, 26px);
+  line-height: 1.4;
+}
+.kiosk-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.kiosk-status {
+  font-size: clamp(22px, 3vw, 34px);
+}
+.kiosk-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.16);
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.kiosk-heading {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(30px, 5vw, 56px);
+}
+.kiosk-topbar-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.kiosk-updated {
+  color: #cbd5e1;
+  font-size: clamp(14px, 1.6vw, 18px);
+}
+.kiosk-btn {
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  background: var(--accent);
+  color: #ffffff;
+  padding: var(--space-3) var(--space-6);
+  min-height: 56px;
+  font-weight: 600;
+}
+.kiosk-btn-quiet {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #f8fafc;
+}
+.kiosk-banner {
+  background: #7f1d1d;
+  color: #fff;
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  font-weight: 600;
+}
+.kiosk-panels {
+  display: grid;
+  gap: clamp(16px, 2.5vw, 28px);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+}
+.kiosk-screen .kiosk-card {
+  background: #111a2e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: clamp(16px, 2.4vw, 28px);
+}
+.kiosk-screen .kiosk-card h2 {
+  color: #ffffff;
+  font-size: clamp(22px, 3vw, 34px);
+  margin: 0 0 var(--space-4);
+}
+.kiosk-fyi {
+  background: linear-gradient(135deg, #0f766e, #115e59) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+.kiosk-fyi-title {
+  color: #ffffff;
+  font-size: clamp(28px, 4vw, 46px) !important;
+}
+.kiosk-fyi-text {
+  font-size: clamp(18px, 2.4vw, 28px);
+  color: #e2e8f0;
+  margin: 0;
+}
+.kiosk-empty {
+  color: #94a3b8;
+  font-size: clamp(18px, 2.2vw, 26px);
+}
+.kiosk-roster,
+.kiosk-checkin-list,
+.kiosk-task-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.kiosk-roster-row,
+.kiosk-checkin-done,
+.kiosk-checkin-pending {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+.kiosk-roster-name {
+  font-weight: 700;
+  font-size: clamp(20px, 2.6vw, 30px);
+}
+.kiosk-roster-role {
+  color: #cbd5e1;
+  flex: 1 1 auto;
+}
+.kiosk-roster-time,
+.kiosk-roster-status {
+  color: #cbd5e1;
+  font-variant-numeric: tabular-nums;
+}
+.kiosk-checked {
+  color: #4ade80;
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* Big tappable rows — check-in and task toggles (shared-mode kiosks). */
+.kiosk-tap {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  min-height: 84px;
+  padding: var(--space-4) var(--space-6);
+  border-radius: 14px;
+  border: 2px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+.kiosk-tap:active {
+  transform: scale(0.99);
+}
+.kiosk-tap .kiosk-roster-role {
+  color: #d1fae5;
+}
+.kiosk-tap-cue {
+  margin-left: auto;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.kiosk-tap-done {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.kiosk-task-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius);
+  font-size: clamp(20px, 2.4vw, 28px);
+}
+.kiosk-task-item.done span:last-child,
+.kiosk-tap-done span:last-child {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+.kiosk-task-box {
+  font-size: 1.4em;
+  line-height: 1;
+}
+.kiosk-camera {
+  text-align: center;
+}
+.kiosk-camera-icon,
+.kiosk-message-icon {
+  font-size: clamp(48px, 8vw, 96px);
+  margin-bottom: var(--space-3);
+}
+.kiosk-message {
+  max-width: 640px;
+}
+.kiosk-message h1 {
+  color: #ffffff;
+  font-size: clamp(28px, 5vw, 48px);
+}
+.kiosk-message p {
+  color: #cbd5e1;
+  font-size: clamp(18px, 2.4vw, 26px);
+  margin-bottom: var(--space-6);
+}
+
+@media (max-width: 560px) {
+  .kiosk-panels {
+    grid-template-columns: 1fr;
+  }
+}

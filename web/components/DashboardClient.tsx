@@ -128,6 +128,9 @@ export default function DashboardClient() {
           <Link className="btn btn-secondary" href="/admin/reports">
             Reports
           </Link>
+          <Link className="btn btn-secondary" href="/admin/kiosks">
+            Kiosks
+          </Link>
           <Link className="btn btn-secondary" href="/admin/assistant">
             AI Assistant
           </Link>
