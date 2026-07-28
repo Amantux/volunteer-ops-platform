@@ -220,8 +220,11 @@ def _t_propose_waitlist_promotion(db, principal, args):
     session_id = args.get("session_id")
     if session_id is None:
         return {"error": "session_id is required"}
+    # allow_auto_execute=False: the assistant must NEVER trigger a live promotion/email even if the
+    # org has the auto-promote policy on — it always files an approval-only proposal.
     proposal = propose_waitlist_promotion(db, org_id=principal.org_id, session_id=int(session_id),
-                                          requested_by_user_id=principal.user_id)
+                                          requested_by_user_id=principal.user_id,
+                                          allow_auto_execute=False)
     if proposal is None:
         return {"proposed": False, "reason": "no eligible waitlisted candidate or no free seat"}
     return {"proposal_id": proposal.id, "status": proposal.status.value,

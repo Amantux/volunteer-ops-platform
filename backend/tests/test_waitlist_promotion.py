@@ -67,3 +67,23 @@ def test_no_promotion_when_no_seat_free(db, org):
     proposal = cancel_registration(db, org_id=org.id, registration_id=a.registration.id)
     assert proposal is None
     assert db.scalar(select(AgentProposal)) is None
+
+
+def test_approval_only_path_never_auto_executes(db, org):
+    """The assistant path passes allow_auto_execute=False: even with the auto-promote policy ON,
+    it must file a `proposed` record and change nothing / send nothing."""
+    from app.modules.training.service import propose_waitlist_promotion
+    db.add(OrganizationSetting(org_id=org.id, key="training.auto_promote", value={"enabled": True}))
+    session, a, b = _full_session_with_waitlist(db, org)
+    session.capacity = 2  # free a seat while B is still waitlisted
+    db.commit()
+    relay(db)  # flush registration emails so the baseline reflects only what the proposal sends
+    before = len(inbox(db, org.id))
+    proposal = propose_waitlist_promotion(db, org_id=org.id, session_id=session.id,
+                                          requested_by_user_id=None, allow_auto_execute=False)
+    db.commit()
+    assert proposal is not None and proposal.status == ProposalStatus.proposed
+    db.expire_all()
+    assert b.registration.status == RegistrationStatus.waitlisted  # unchanged
+    relay(db)
+    assert len(inbox(db, org.id)) == before  # no email sent by the approval-only path
