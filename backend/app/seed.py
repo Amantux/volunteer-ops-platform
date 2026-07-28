@@ -32,6 +32,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "social.draft", "social.manage", "social.approve", "social.publish",
         "forms.admin", "forms.review", "workflows.admin", "incident.triage", "incident.close",
         "donation.view", "donation.manage", "finance.export",
+        "assistant.configure",
     ],
     "trainer": [
         "training.manage_session", "training.record_attendance", "training.record_completion",

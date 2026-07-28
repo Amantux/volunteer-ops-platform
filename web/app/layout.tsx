@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import AuthNav from '@/components/AuthNav';
+import ChatAssistant from '@/components/ChatAssistant';
 import { getSiteNav, type SiteNavItem } from '@/lib/api';
 import './globals.css';
 
@@ -79,6 +80,9 @@ export default async function RootLayout({
             </p>
           </div>
         </footer>
+
+        {/* Floating assistant — self-hides when there is no session token. */}
+        <ChatAssistant />
       </body>
     </html>
   );
