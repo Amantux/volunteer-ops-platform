@@ -23,6 +23,7 @@ celery_app.conf.beat_schedule = {
     "publish-due-social": {"task": "app.worker.publish_due_social", "schedule": 60.0},
     "sweep-workflow-deadlines": {"task": "app.worker.sweep_workflow_deadlines", "schedule": 300.0},
     "send-shift-reminders": {"task": "app.worker.send_shift_reminders", "schedule": 3600.0},
+    "sweep-pending-donations": {"task": "app.worker.sweep_pending_donations", "schedule": 3600.0},
 }
 celery_app.conf.timezone = "UTC"
 
@@ -80,5 +81,16 @@ def send_shift_reminders() -> int:
 
     with SessionLocal() as db:
         n = _remind(db)
+        db.commit()
+        return n
+
+
+@celery_app.task(name="app.worker.sweep_pending_donations")
+def sweep_pending_donations() -> int:
+    """Fail donations whose checkout was abandoned (no verified webhook within the window)."""
+    from app.modules.donations.service import expire_stale_pending_donations
+
+    with SessionLocal() as db:
+        n = expire_stale_pending_donations(db)
         db.commit()
         return n

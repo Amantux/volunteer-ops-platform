@@ -74,6 +74,10 @@ class FormDefinition(Base, TimestampMixin):
     default_visibility: Mapped[Visibility] = mapped_column(default=Visibility.internal,
                                                            nullable=False)
     workflow_key: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    # Optional submit acknowledgement: email `ack_template_key` to the address in the answer field
+    # named `ack_recipient_field` as soon as the form is submitted. Both empty = no ack.
+    ack_template_key: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    ack_recipient_field: Mapped[str] = mapped_column(String(80), default="", nullable=False)
     status: Mapped[FormDefinitionStatus] = mapped_column(default=FormDefinitionStatus.active,
                                                          nullable=False)
 

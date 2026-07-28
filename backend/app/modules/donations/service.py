@@ -15,7 +15,7 @@ from __future__ import annotations
 import csv
 import io
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -472,3 +472,26 @@ def export_rows(db: Session, *, org_id: int) -> str:
                     receipt_number or "", f"donor#{d.donor_id}" if d.donor_id else "anonymous",
                     d.status.value])
     return buf.getvalue()
+
+
+def expire_stale_pending_donations(db: Session, *, older_than_hours: int = 240) -> int:
+    """Reconcile drift: a `pending` donation still unsettled long past any legitimate settlement
+    window is an abandoned checkout — mark it `failed` so it stops counting as in-flight.
+
+    The window is deliberately wide (default 10 days): delayed-notification methods (ACH/SEPA/OXXO)
+    legitimately sit `pending` for several business days before `async_payment_succeeded` settles
+    them, so a short window would fail real in-flight donations. This is self-healing regardless —
+    a later verified success reconciles `failed → succeeded` (`_mark_succeeded` only short-circuits
+    on already-`succeeded`) — but we keep the window past ACH so a paying donor is never shown
+    `failed` in the interim. (With live Stripe, a stricter version would re-query the intent before
+    failing; card checkouts that never settle are the common abandoned case and this is conservative.)
+    """
+    cutoff = utcnow() - timedelta(hours=older_than_hours)
+    stale = db.scalars(select(Donation).where(
+        Donation.status == DonationStatus.pending, Donation.created_at < cutoff)).all()
+    for d in stale:
+        d.status = DonationStatus.failed
+        audit.emit(db, org_id=d.org_id, action="donation.expired_pending", target_type="donation",
+                   target_id=d.id)
+    db.flush()
+    return len(stale)

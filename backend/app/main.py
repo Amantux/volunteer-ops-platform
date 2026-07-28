@@ -31,6 +31,22 @@ from app.seed import seed_bootstrap
 _INSECURE_SECRETS = {"dev-secret-change-me", "change-me-in-prod"}
 
 
+def _init_sentry() -> None:
+    """Wire error tracking when a DSN is configured. No-op (and never fatal) otherwise."""
+    if not settings.sentry_dsn:
+        return
+    try:
+        import sentry_sdk
+
+        sentry_sdk.init(dsn=settings.sentry_dsn, environment=settings.environment,
+                        traces_sample_rate=0.0, send_default_pii=False)
+    except Exception as exc:  # noqa: BLE001 - observability must never take the app down
+        print(f"WARNING: Sentry init failed ({exc}); continuing without error tracking.")
+
+
+_init_sentry()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Fail fast if a real email provider is configured with an insecure app secret:

@@ -60,6 +60,37 @@ services:
       postgres: {condition: service_healthy}
     restart: "no"
 
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes: [vop_backups:/backups]
+    # Nightly pg_dump to a durable volume; keep the most recent 14. Restore with:
+    #   gunzip -c /backups/<file>.sql.gz | psql -h postgres -U "$POSTGRES_USER" "$POSTGRES_DB"
+    # NOTE: dump to a temp file and check pg_dump's OWN exit status BEFORE gzip+rotate. A naive
+    # `pg_dump | gzip > f` hides pg_dump failures (pipeline status is gzip's) and would rotate away
+    # good backups after silently writing empty ones.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          ts=$$(date +%Y%m%d_%H%M%S)
+          tmp="/backups/.vop_$$ts.sql"
+          if PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h postgres -U "$$POSTGRES_USER" "$$POSTGRES_DB" > "$$tmp"; then
+            gzip "$$tmp" && mv "$$tmp.gz" "/backups/vop_$$ts.sql.gz" && echo "backup vop_$$ts.sql.gz"
+            # Rotate ONLY after a confirmed-good backup, so failures never purge good ones.
+            ls -1t /backups/vop_*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm -f
+          else
+            echo "backup FAILED at $$ts"; rm -f "$$tmp"
+          fi
+          sleep 86400
+        done
+    depends_on:
+      postgres: {condition: service_healthy}
+
   api:
     build: ./backend
     restart: unless-stopped
@@ -84,6 +115,12 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   beat:
     build: ./backend
@@ -121,5 +158,6 @@ services:
 volumes:
   vop_pg:
   vop_redis:
+  vop_backups:
   caddy_data:
   caddy_config:
