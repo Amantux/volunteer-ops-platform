@@ -7,11 +7,11 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'Riverside Volunteers — Training & Registration',
-    template: '%s · Riverside Volunteers',
+    default: 'Golden Opportunities for Independence — Training & Registration',
+    template: '%s · Golden Opportunities for Independence',
   },
   description:
-    'Riverside Volunteers trains and mobilises neighbours to support our community. Browse trainings and register in minutes.',
+    'Golden Opportunities for Independence (GOFI) breeds and trains Golden Retriever service, facility, and crisis-response dogs. Volunteer, foster a puppy, or support our mission.',
 };
 
 export const viewport = {
@@ -41,11 +41,11 @@ export default async function RootLayout({
         </a>
         <header className="site-header">
           <div className="container">
-            <Link className="brand" href="/">
+            <Link className="brand" href="/" title="Golden Opportunities for Independence">
               <span className="brand-mark" aria-hidden="true">
-                ♥
+                🐾
               </span>
-              Riverside Volunteers
+              GOFI
             </Link>
             <nav className="site-nav" aria-label="Primary">
               <Link href="/">Home</Link>
@@ -72,9 +72,10 @@ export default async function RootLayout({
               <Link href="/contact">Contact</Link>
             </nav>
             <p style={{ margin: 0 }}>
-              Riverside Volunteers is a community nonprofit. Questions? Email{' '}
-              <a href="mailto:hello@riverside-volunteers.org">
-                hello@riverside-volunteers.org
+              Golden Opportunities for Independence is a 501(c)(3) nonprofit in Walpole, MA.
+              Questions? Email{' '}
+              <a href="mailto:contact@gofidog.org">
+                contact@gofidog.org
               </a>
               .
             </p>

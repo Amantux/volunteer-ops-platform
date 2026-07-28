@@ -4,7 +4,7 @@ import { formatWhen, getCalendar, type CalendarItem } from '@/lib/api';
 export const metadata: Metadata = {
   title: 'Calendar',
   description:
-    'Upcoming Riverside Volunteers training sessions and volunteer shifts, in one place.',
+    'Upcoming Golden Opportunities for Independence training sessions and volunteer shifts, in one place.',
 };
 
 // Public content must reflect live scheduling.
@@ -114,8 +114,8 @@ export default async function CalendarPage() {
           <strong>We couldn&rsquo;t load the calendar right now.</strong>
           <p>
             Please refresh the page in a moment. If it keeps happening, email{' '}
-            <a href="mailto:hello@riverside-volunteers.org">
-              hello@riverside-volunteers.org
+            <a href="mailto:contact@gofidog.org">
+              contact@gofidog.org
             </a>
             .
           </p>

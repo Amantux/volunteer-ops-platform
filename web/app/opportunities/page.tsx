@@ -26,7 +26,7 @@ function PinIcon() {
 export const metadata: Metadata = {
   title: 'Volunteer opportunities',
   description:
-    'Browse open volunteer shifts with Riverside Volunteers and find one that fits your schedule.',
+    'Browse open volunteer shifts with Golden Opportunities for Independence and find one that fits your schedule.',
 };
 
 // Public content must reflect live availability.
@@ -96,8 +96,8 @@ export default async function OpportunitiesPage() {
             <strong>We couldn&rsquo;t load opportunities right now.</strong>
             <p>
               Please refresh the page in a moment. If it keeps happening, email{' '}
-              <a href="mailto:hello@riverside-volunteers.org">
-                hello@riverside-volunteers.org
+              <a href="mailto:contact@gofidog.org">
+                contact@gofidog.org
               </a>
               .
             </p>

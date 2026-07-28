@@ -67,7 +67,7 @@ export default async function TrainingsPage() {
     <div className="container page">
       <h1>Upcoming trainings</h1>
       <p className="lede">
-        Free sessions run by Riverside Volunteers. Pick one to see details and
+        Free sessions run by Golden Opportunities for Independence. Pick one to see details and
         register.
       </p>
 
@@ -76,8 +76,8 @@ export default async function TrainingsPage() {
           <strong>We couldn&rsquo;t load trainings right now.</strong>
           <p>
             Please refresh the page in a moment. If it keeps happening, email{' '}
-            <a href="mailto:hello@riverside-volunteers.org">
-              hello@riverside-volunteers.org
+            <a href="mailto:contact@gofidog.org">
+              contact@gofidog.org
             </a>
             .
           </p>
@@ -96,7 +96,7 @@ export default async function TrainingsPage() {
           </p>
           <a
             className="btn btn-primary"
-            href="mailto:hello@riverside-volunteers.org"
+            href="mailto:contact@gofidog.org"
           >
             Email us
           </a>

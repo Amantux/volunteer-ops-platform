@@ -25,15 +25,15 @@ class Settings(BaseSettings):
     # Optional error tracking (Sentry). Empty = disabled.
     sentry_dsn: str = ""
 
-    # First-run bootstrap org + admin.
-    bootstrap_org_name: str = "Community Volunteers"
-    bootstrap_org_slug: str = "community"
-    bootstrap_admin_email: str = "admin@example.org"
+    # First-run bootstrap org + admin. (org/gofidog branch defaults — override via env per deploy.)
+    bootstrap_org_name: str = "Golden Opportunities for Independence"
+    bootstrap_org_slug: str = "gofidog"
+    bootstrap_admin_email: str = "admin@gofidog.org"
 
     # Email provider: "console" (dev, logs), "inbox" (dev, DB table), or "smtp" (real:
     # Postmark/SES/any SMTP). Selected by adapter factory.
     email_provider: str = "inbox"
-    email_from: str = "Community Volunteers <no-reply@example.org>"
+    email_from: str = "Golden Opportunities for Independence <no-reply@gofidog.org>"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     payment_provider: str = "fake"
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+
+    # Seed this instance's org-specific content (programs, qualifications, the application form,
+    # sample enrollment/campaign). Off by default so the generic test suite gets a minimal seed;
+    # the GOFI deployment sets VOP_SEED_ORG_CONTENT=true.
+    seed_org_content: bool = False
 
     # Public base URL for links in emails.
     public_base_url: str = "http://localhost:3000"

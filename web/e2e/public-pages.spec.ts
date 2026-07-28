@@ -56,7 +56,7 @@ test.describe('public content pages', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(
       page.getByRole('link', {
-        name: /email hello@riverside-volunteers\.org/i,
+        name: /email contact@gofidog\.org/i,
       }),
     ).toBeVisible();
   });
