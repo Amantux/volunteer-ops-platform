@@ -62,6 +62,17 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = ""
 
+    # Chat assistant defaults (per-org overrides live in OrganizationSetting["assistant"], set by
+    # admins in the UI; overrides win). "off" disables chat. Providers: off | ollama | anthropic.
+    # The assistant is governed: it reads/drafts and files approval proposals — it never
+    # auto-executes send/publish/refund/delete (R4). Card entry etc. stays human-gated.
+    assistant_provider: str = "off"
+    assistant_base_url: str = ""      # e.g. http://host.docker.internal:11434 for local Ollama
+    assistant_model: str = ""         # e.g. llama3.1
+    assistant_api_key: str = ""       # optional (Ollama local needs none; anthropic/gateways do)
+    assistant_timeout: int = 60
+    assistant_max_steps: int = 6      # max tool-call loop iterations per turn
+
     # Social publishing. "manual" (default: mark posted + export copy, no external effect) or
     # "webhook" (POST to social_webhook_url, e.g. Zapier). Real platform adapters are deferred.
     social_publisher: str = "manual"
