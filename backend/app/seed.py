@@ -99,6 +99,21 @@ TEMPLATES: dict[str, tuple[str, str]] = {
         "Hello,\n\nThank you for your report. Its status is now: {{status}}.\n\n"
         "We appreciate you letting us know.",
     ),
+    "application_received": (
+        "We received your Puppy Raiser application",
+        "Thank you for applying to raise a service dog in training with GOFI. Our team will review "
+        "your application and be in touch. We're grateful you want to help.",
+    ),
+    "application_approved": (
+        "Your GOFI Puppy Raiser application — approved!",
+        "Great news — your application to become a GOFI Puppy Raiser has been approved. A "
+        "coordinator will reach out with next steps, training, and your certification.",
+    ),
+    "application_declined": (
+        "Update on your GOFI Puppy Raiser application",
+        "Thank you for your interest in raising a service dog with GOFI. We're not able to move "
+        "forward with your application at this time, but we'd welcome you in other volunteer roles.",
+    ),
     "donation_thank_you": (
         "Thank you for your donation",
         "Thank you for your generous gift of {{amount_minor_units}} {{currency}} (minor units).\n"
@@ -127,6 +142,8 @@ def seed_bootstrap(db: Session, *, include_demo: bool = True) -> Organization:
     _seed_templates(db, org.id)
     _seed_pages(db, org.id)
     _seed_forms(db, org.id)
+    if settings.seed_org_content:
+        _seed_gofi_programs(db, org.id, include_demo=include_demo)
     if include_demo:
         _seed_demo_training(db, org.id)
         _seed_demo_opportunity(db, org.id)
@@ -266,13 +283,32 @@ def _seed_pages(db: Session, org_id: int) -> None:
                  "Walpole, Massachusetts, where every volunteer, recipient, and dog becomes family."),
             {"type": "button", "label": "Get involved", "href": "/opportunities"},
         ]),
-        ("get-involved", "Get involved", 2, True, [
+        ("programs", "Our programs", 2, True, [
+            {"type": "heading", "level": 1, "text": "Our programs"},
+            para("GOFI breeds and trains Golden Retrievers for three programs. Volunteer "
+                 "<strong>puppy raisers</strong> give each dog its start; <strong>puppy sitters</strong> "
+                 "provide short-term respite care when a raiser is away."),
+            {"type": "heading", "level": 2, "text": "Service Dogs"},
+            para("Partnered with individuals living with disabilities to open doors to greater "
+                 "independence."),
+            {"type": "heading", "level": 2, "text": "Facility Dogs"},
+            para("Placed with professionals in schools, hospitals, and courts to bring calm and "
+                 "connection where it's needed most."),
+            {"type": "heading", "level": 2, "text": "Crisis Response Dogs"},
+            para("Deployed with handlers to comfort people in the aftermath of trauma and disaster."),
+            {"type": "button", "label": "Apply to raise a puppy",
+             "href": "/forms/puppy_raiser_application"},
+        ]),
+        ("get-involved", "Get involved", 3, True, [
             {"type": "heading", "level": 1, "text": "Get involved"},
             para("Our volunteer puppy raisers are the backbone of the Service Dog Program — "
                  "raising a young dog and giving it the foundation to change someone's life. It's "
                  "the most hands-on way to help, and we support you every step of the way."),
-            para("Not able to raise a puppy? You can still help: foster, host a fundraiser, donate, "
-                 "or send supplies (puppy pads, wipes, treats, toys) from our wish list."),
+            para("Not able to raise a puppy? Become a puppy sitter for short-term respite care, "
+                 "foster, host a fundraiser, donate, or send supplies from our wish list."),
+            {"type": "button", "label": "Apply to raise a puppy",
+             "href": "/forms/puppy_raiser_application"},
+            {"type": "button", "label": "Donate", "href": "/donate?campaign=raise-a-service-dog"},
             {"type": "button", "label": "See opportunities", "href": "/opportunities"},
         ]),
         # FAQ + Contact are editable and served at /faq /contact, linked from the footer.
@@ -365,4 +401,151 @@ def _seed_forms(db: Session, org_id: int) -> None:
     ]}
     fv = create_draft_version(db, org_id=org_id, def_id=definition.id, schema=schema)
     publish_version(db, org_id=org_id, def_id=definition.id, version=fv.version, actor_user_id=None)
+    db.flush()
+
+
+def _seed_gofi_programs(db: Session, org_id: int, *, include_demo: bool = True) -> None:
+    """GOFI programs, the two puppy qualifications, the Puppy Raiser application (apply → review →
+    approve/decline, emailing the applicant via Phase A's notify→email), and — for demos — a
+    certified raiser enrollment, a qualification-gated puppy-sitter signup sheet, and a donation
+    campaign. Structural parts always seed; demo content is gated on `include_demo`."""
+    from datetime import timedelta
+
+    from app.core.db import utcnow
+    from app.modules.forms.models import FormDefinition
+    from app.modules.forms.service import create_definition, create_draft_version, publish_version
+    from app.modules.org.models import Program
+    from app.modules.people.service import create_qualification_type
+    from app.modules.workflows.models import WorkflowDefinition
+
+    if db.scalar(select(func.count()).select_from(Program).where(Program.org_id == org_id)):
+        return  # idempotent — GOFI programs already seeded
+
+    # --- Programs (the three GOFI service-dog programs) --- #
+    programs = {}
+    for key, name in (("service_dog", "Service Dog Program"),
+                      ("facility_dog", "Facility Dog Program"),
+                      ("crisis_response_dog", "Crisis Response Dog Program")):
+        p = Program(org_id=org_id, key=key, name=name)
+        db.add(p)
+        db.flush()
+        programs[key] = p
+
+    # --- Qualifications: raiser (long-term) vs sitter (short-term respite) --- #
+    raiser_qual = create_qualification_type(
+        db, org_id=org_id, key="puppy_raiser_certified", label="Puppy Raiser Certified")
+    sitter_qual = create_qualification_type(
+        db, org_id=org_id, key="puppy_sitter_certified", label="Puppy Sitter Certified")
+
+    # --- Puppy Raiser application: governed apply → review → approve/decline, emailing the
+    #     applicant (Phase A notify→email uses the submission's `email` answer). --- #
+    if db.scalar(select(FormDefinition).where(FormDefinition.org_id == org_id,
+                                              FormDefinition.key == "puppy_raiser_application")) is None:
+        db.add(WorkflowDefinition(
+            org_id=org_id, key="volunteer_application", name="Volunteer application",
+            subject_type="form_submission", initial_state="submitted",
+            states=[{"name": "submitted", "sla_hours": 168}, {"name": "under_review"},
+                    {"name": "approved", "is_terminal": True},
+                    {"name": "declined", "is_terminal": True}],
+            transitions=[
+                {"name": "start_review", "from": "submitted", "to": "under_review",
+                 "permission": "forms.review",
+                 "entry_actions": [{"emit_audit": "application.reviewing"}]},
+                {"name": "approve", "from": "under_review", "to": "approved",
+                 "permission": "forms.review",
+                 "entry_actions": [{"emit_audit": "application.approved"},
+                                   {"notify": {"template": "application_approved", "to": "email"}}]},
+                {"name": "decline", "from": "under_review", "to": "declined",
+                 "permission": "forms.review",
+                 "entry_actions": [{"emit_audit": "application.declined"},
+                                   {"notify": {"template": "application_declined", "to": "email"}}]},
+            ]))
+        db.flush()
+        app_def = create_definition(
+            db, org_id=org_id, key="puppy_raiser_application", name="Puppy Raiser application",
+            purpose="Apply to raise a service dog in training as a GOFI puppy raiser.",
+            default_visibility="public", workflow_key="volunteer_application")
+        app_schema = {"fields": [
+            {"key": "full_name", "type": "text", "label": "Your full name",
+             "visibility": "public", "validation": {"required": True}},
+            {"key": "email", "type": "text", "label": "Email",
+             "visibility": "public", "validation": {"required": True}},
+            {"key": "phone", "type": "text", "label": "Phone", "visibility": "public",
+             "validation": {"required": False}},
+            {"key": "town", "type": "text", "label": "Town / area you live in",
+             "visibility": "public", "validation": {"required": True}},
+            {"key": "home_type", "type": "select", "label": "Your home",
+             "options": ["House with a yard", "House, no yard", "Apartment/condo", "Other"],
+             "visibility": "public", "validation": {"required": True}},
+            {"key": "has_other_pets", "type": "boolean", "label": "Do you have other pets?",
+             "visibility": "public", "validation": {"required": False}},
+            {"key": "experience", "type": "text",
+             "label": "Tell us about your experience with dogs",
+             "visibility": "public", "validation": {"required": False}},
+            {"key": "availability", "type": "select",
+             "label": "Can you commit to raising a puppy (~12-18 months)?",
+             "options": ["Yes", "Not sure — I have questions", "No, other volunteering only"],
+             "visibility": "public", "validation": {"required": True}},
+            {"key": "why", "type": "text", "label": "Why do you want to be a puppy raiser?",
+             "visibility": "public", "validation": {"required": False}},
+            {"key": "reviewer_notes", "type": "text", "label": "Reviewer notes",
+             "visibility": "internal", "validation": {"required": False}},
+        ]}
+        afv = create_draft_version(db, org_id=org_id, def_id=app_def.id, schema=app_schema)
+        publish_version(db, org_id=org_id, def_id=app_def.id, version=afv.version,
+                        actor_user_id=None)
+        db.flush()
+
+    if not include_demo:
+        return
+
+    # --- Demo: a certified puppy raiser enrolled long-term in the Service Dog program --- #
+    from app.modules.people.models import VolunteerProfile
+    from app.modules.people.service import enroll, grant_qualification
+
+    raiser_email = "demo.raiser@gofidog.org"
+    person = db.scalar(select(Person).where(Person.org_id == org_id,
+                                            Person.email == raiser_email))
+    if person is None:
+        person = Person(org_id=org_id, name="Dana Raiser", email=raiser_email, email_verified=True)
+        db.add(person)
+        db.flush()
+        user = User(org_id=org_id, person_id=person.id)
+        db.add(user)
+        db.flush()
+        db.add(VolunteerProfile(org_id=org_id, person_id=person.id))
+        vol_role = db.scalar(select(Role).where(Role.org_id == org_id, Role.key == "volunteer"))
+        if vol_role is not None:
+            db.add(UserRoleAssignment(org_id=org_id, user_id=user.id, role_id=vol_role.id))
+        db.flush()
+        grant_qualification(db, org_id=org_id, volunteer_email=raiser_email,
+                            qualification_type_id=raiser_qual.id, source="seed")
+        enroll(db, org_id=org_id, volunteer_email=raiser_email,
+               program_id=programs["service_dog"].id, role="puppy_raiser",
+               notes="Demo long-term raiser enrollment.")
+
+    # --- Demo: a qualification-gated Puppy Sitter respite signup sheet --- #
+    from app.modules.scheduling.service import create_event, create_recurring_shifts
+
+    ev = create_event(db, org_id=org_id, title="Puppy Sitter — respite care",
+                      kind="event", is_public=True, program_id=programs["service_dog"].id,
+                      description="Short-term care for a service-dog-in-training while their raiser "
+                                  "is away. Requires Puppy Sitter certification.")
+    start = (utcnow() + timedelta(days=7)).replace(hour=9, minute=0, second=0, microsecond=0)
+    create_recurring_shifts(
+        db, org_id=org_id, event_id=ev.id, starts_at=start, ends_at=start + timedelta(hours=8),
+        location="Sitter's home", repeat="weekly", count=4,
+        roles=[{"name": "Puppy Sitter", "capacity": 1,
+                "required_qualification_type_id": sitter_qual.id}])
+
+    # --- Demo: a public donation campaign (Phase C) --- #
+    from app.modules.donations.service import create_campaign, update_campaign
+
+    campaign = create_campaign(
+        db, org_id=org_id, slug="raise-a-service-dog", title="Raise a Service Dog",
+        description="It costs about $45,000 to breed, raise, and train one GOFI service dog. Your "
+                    "gift helps place a life-changing dog with someone who needs one.",
+        goal_minor_units=4500000, currency="USD", suggested_amounts=[2500, 5000, 10000, 25000])
+    update_campaign(db, org_id=org_id, campaign_id=campaign.id, status="active", is_public=True,
+                    publish_progress=True)
     db.flush()

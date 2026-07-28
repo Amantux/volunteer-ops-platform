@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
 
+    # Seed this instance's org-specific content (programs, qualifications, the application form,
+    # sample enrollment/campaign). Off by default so the generic test suite gets a minimal seed;
+    # the GOFI deployment sets VOP_SEED_ORG_CONTENT=true.
+    seed_org_content: bool = False
+
     # Public base URL for links in emails.
     public_base_url: str = "http://localhost:3000"
 
