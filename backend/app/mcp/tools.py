@@ -191,3 +191,48 @@ def _get_donation_metrics(db: Session, principal: Principal, args: dict) -> dict
     from app.modules.donations.service import donation_metrics
 
     return {"metrics": donation_metrics(db, org_id=principal.org_id)}
+
+
+@tool(ToolContract(
+    name="list_kiosks", permission="kiosk.view",
+    risk=RiskLevel.r0_read, approval_required=False, reversible=True, idempotent=True,
+    audit_action="mcp.list_kiosks", data_classification="Internal",
+))
+def _list_kiosks(db: Session, principal: Principal, args: dict) -> dict:
+    """Name-addressable list of the org's kiosks and what each is showing."""
+    from app.modules.kiosk import service as kiosk
+    return {"kiosks": [kiosk.kiosk_summary(db, k)
+                       for k in kiosk.list_kiosks(db, org_id=principal.org_id)]}
+
+
+@tool(ToolContract(
+    name="get_kiosk", permission="kiosk.view",
+    risk=RiskLevel.r0_read, approval_required=False, reversible=True, idempotent=True,
+    audit_action="mcp.get_kiosk", data_classification="Internal",
+))
+def _get_kiosk(db: Session, principal: Principal, args: dict) -> dict:
+    """Look up a single kiosk BY NAME and return its configuration + what it's showing."""
+    from app.modules.kiosk import service as kiosk
+    k = kiosk.get_by_name(db, org_id=principal.org_id, name=str(args.get("name", "")))
+    if k is None:
+        raise ToolError("no kiosk with that name")
+    return {"kiosk": kiosk.kiosk_summary(db, k), "panels": k.panels}
+
+
+@tool(ToolContract(
+    name="set_kiosk_panels", permission="kiosk.manage",
+    risk=RiskLevel.r2_low_execute, approval_required=False, reversible=True, idempotent=True,
+    audit_action="mcp.set_kiosk_panels", data_classification="Internal",
+))
+def _set_kiosk_panels(db: Session, principal: Principal, args: dict) -> dict:
+    """Update what a kiosk (BY NAME) displays. `panels` is the ordered list of
+    {type: schedule|checkin|tasks|fyi|roster|camera, ...options}. Reversible config change."""
+    from app.modules.kiosk import service as kiosk
+    k = kiosk.get_by_name(db, org_id=principal.org_id, name=str(args.get("name", "")))
+    if k is None:
+        raise ToolError("no kiosk with that name")
+    try:
+        kiosk.update_kiosk(db, org_id=principal.org_id, kiosk_id=k.id, panels=args.get("panels"))
+    except kiosk.KioskError as exc:
+        raise ToolError(str(exc)) from exc
+    return {"kiosk": k.name, "panels": k.panels}
