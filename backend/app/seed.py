@@ -32,7 +32,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "social.draft", "social.manage", "social.approve", "social.publish",
         "forms.admin", "forms.review", "workflows.admin", "incident.triage", "incident.close",
         "donation.view", "donation.manage", "finance.export",
-        "assistant.configure",
+        "assistant.configure", "kiosk.view", "kiosk.manage",
     ],
     "trainer": [
         "training.manage_session", "training.record_attendance", "training.record_completion",
@@ -42,6 +42,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "shift.manage", "shift.view_roster", "shift.record_attendance", "hours.approve",
         "report.view_staffing",
         "enrollment.view", "enrollment.manage", "volunteer.manage_background_check",
+        "kiosk.view", "kiosk.manage",
     ],
     "volunteer": [
         "shift.view_eligible", "shift.signup",

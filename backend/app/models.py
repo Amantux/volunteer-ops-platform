@@ -41,6 +41,11 @@ from app.modules.identity.models import (  # noqa: F401
     UserRoleAssignment,
     VerificationToken,
 )
+from app.modules.kiosk.models import (  # noqa: F401
+    Kiosk,
+    KioskTask,
+    KioskTaskCompletion,
+)
 from app.modules.org.models import (  # noqa: F401
     Organization,
     OrganizationSetting,
