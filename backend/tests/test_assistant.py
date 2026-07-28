@@ -53,6 +53,31 @@ def test_tools_are_filtered_to_caller_permissions(db, org, admin_user):
     assert "my_upcoming_shifts" in vol_tools        # but does get their own shifts
 
 
+def test_write_tools_are_drafts_and_permission_gated(db, org, admin_user):
+    admin = Principal(user_id=admin_user.id, org_id=org.id)
+    tools = assistant._available_tools(db, admin)
+    assert "draft_social_post" in tools and tools["draft_social_post"].kind == "draft"
+    assert "propose_waitlist_promotion" in tools
+    # A volunteer holds neither social.draft nor training.approve_promotion.
+    vol_user, _ = _user_with_role(db, org, "vw@x.org", "volunteer")
+    vtools = assistant._available_tools(db, Principal(user_id=vol_user.id, org_id=org.id))
+    assert "draft_social_post" not in vtools and "propose_waitlist_promotion" not in vtools
+
+
+def test_draft_social_post_creates_a_draft_not_a_publish(db, org, admin_user):
+    from app.modules.social.models import PostStatus, SocialPost
+    admin = Principal(user_id=admin_user.id, org_id=org.id)
+    out = assistant.CHAT_TOOLS["draft_social_post"].handler(db, admin, {"prompt": "thank volunteers"})
+    db.flush()
+    post = db.get(SocialPost, out["post_id"])
+    assert post is not None and post.status == PostStatus.draft  # drafted, never published
+
+
+def test_no_send_or_publish_tool_in_chat():
+    for name in assistant.CHAT_TOOLS:
+        assert "publish" not in name and "send" not in name and "refund" not in name
+
+
 def test_chat_returns_setup_message_when_disabled(db, org, admin_user):
     principal = Principal(user_id=admin_user.id, org_id=org.id)
     res = assistant.run_chat(db, principal, [{"role": "user", "content": "hi"}])
