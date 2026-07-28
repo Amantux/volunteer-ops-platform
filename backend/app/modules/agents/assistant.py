@@ -87,9 +87,11 @@ _SYSTEM_PROMPT = (
     "You are the volunteer-operations assistant for this organization. Help signed-in staff and "
     "volunteers with clear, concise answers about schedules, shifts, training, programs, and "
     "(for finance staff) donations. Prefer calling a tool to look up real data over guessing. "
-    "You can only READ data the current user is authorized to see; you cannot send messages, "
-    "publish, move money, or change records — if asked to, explain that a staff member must do that "
-    "in the app. Keep answers short and practical."
+    "You can READ data the current user is authorized to see, and you can DRAFT content (e.g. a "
+    "social post) or PROPOSE an approval-gated action (e.g. promoting a waitlisted volunteer) — "
+    "these only create a draft or a request that a human must review and approve. You can NEVER "
+    "send messages, publish, move money, or change records directly; if asked, explain that you've "
+    "drafted/proposed it and a staff member must approve it in the app. Keep answers short and practical."
 )
 
 _ASSISTANT_SETTING_KEY = "assistant"
@@ -170,6 +172,8 @@ class ChatTool:
     parameters: dict  # JSON schema
     handler: Callable[[Session, Principal, dict], dict]
     label: str  # human label for the action card
+    kind: str = "read"  # read | draft | proposed — drives the action-card styling; drives NOTHING
+    #                     that sends/publishes. "draft"/"proposed" create governed records only.
 
 
 def _t_overview(db, principal, args):
@@ -197,6 +201,36 @@ def _t_my_shifts(db, principal, args):
     return {"shifts": my_signups(db, org_id=principal.org_id, profile_id=profile.id)}
 
 
+def _t_draft_social_post(db, principal, args):
+    """Create a social-post DRAFT (never published — publishing stays a human R4 action)."""
+    from app.modules.social.models import PostSource
+    from app.modules.social.service import create_post
+    prompt = str(args.get("prompt", "")).strip()
+    if not prompt:
+        return {"error": "a topic/prompt is required"}
+    post = create_post(db, org_id=principal.org_id, created_by=principal.user_id, channel_ids=[],
+                       source=PostSource.llm_assisted, prompt=prompt)
+    return {"post_id": post.id, "body": post.body,
+            "note": "Saved as a draft in Social — a human must review, approve, and publish it."}
+
+
+def _t_propose_waitlist_promotion(db, principal, args):
+    """File an approval PROPOSAL to promote the next waitlisted person — awaits human approval."""
+    from app.modules.training.service import propose_waitlist_promotion
+    session_id = args.get("session_id")
+    if session_id is None:
+        return {"error": "session_id is required"}
+    # allow_auto_execute=False: the assistant must NEVER trigger a live promotion/email even if the
+    # org has the auto-promote policy on — it always files an approval-only proposal.
+    proposal = propose_waitlist_promotion(db, org_id=principal.org_id, session_id=int(session_id),
+                                          requested_by_user_id=principal.user_id,
+                                          allow_auto_execute=False)
+    if proposal is None:
+        return {"proposed": False, "reason": "no eligible waitlisted candidate or no free seat"}
+    return {"proposal_id": proposal.id, "status": proposal.status.value,
+            "note": "Filed for human approval — nothing changes until an admin approves it."}
+
+
 CHAT_TOOLS: dict[str, ChatTool] = {
     "get_overview": ChatTool(
         "Operational overview: active volunteers, upcoming shifts, application funnel, hours "
@@ -211,6 +245,18 @@ CHAT_TOOLS: dict[str, ChatTool] = {
     "my_upcoming_shifts": ChatTool(
         "The signed-in volunteer's own upcoming shift sign-ups.", "shift.view_eligible",
         {"type": "object", "properties": {}}, _t_my_shifts, "Looked up your shifts"),
+    "draft_social_post": ChatTool(
+        "Draft a social media post (saved as a draft for a human to review/approve/publish — it is "
+        "NOT published).", "social.draft",
+        {"type": "object", "properties": {"prompt": {"type": "string",
+         "description": "what the post should be about"}}, "required": ["prompt"]},
+        _t_draft_social_post, "Drafted a social post (pending review)", kind="draft"),
+    "propose_waitlist_promotion": ChatTool(
+        "Propose promoting the next waitlisted person into a freed training seat. Files an approval "
+        "request — a human must approve; nothing happens automatically.", "training.approve_promotion",
+        {"type": "object", "properties": {"session_id": {"type": "integer"}},
+         "required": ["session_id"]},
+        _t_propose_waitlist_promotion, "Filed a promotion proposal (needs approval)", kind="proposed"),
 }
 
 
@@ -370,7 +416,7 @@ def _run_tool(db: Session, principal: Principal, tools: dict[str, ChatTool], nam
         result = tool.handler(db, principal, args or {})
     except Exception as exc:  # noqa: BLE001 - report tool errors back to the model, don't crash
         return f"Tool error: {str(exc)[:200]}"
-    actions.append({"kind": "read", "label": tool.label})
+    actions.append({"kind": tool.kind, "label": tool.label})
     audit.emit(db, org_id=principal.org_id, action="assistant.tool", actor_type="user",
                actor_id=principal.user_id, target_type="chat_tool", target_id=name)
     db.commit()

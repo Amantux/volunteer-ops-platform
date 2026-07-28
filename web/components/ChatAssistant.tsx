@@ -307,12 +307,14 @@ export default function ChatAssistant() {
                 {t.actions && t.actions.length > 0 && (
                   <div className="chat-acts">
                     {t.actions.map((a, j) => (
-                      <div key={j} className="chat-act">
+                      <div key={j} className={`chat-act chat-act-${a.kind || 'read'}`}>
                         <span className="chat-act-icon" aria-hidden="true">
-                          🔍
+                          {a.kind === 'draft' ? '✎' : a.kind === 'proposed' ? '⏳' : '🔍'}
                         </span>
                         <span className="chat-act-label">
                           {a.label || a.kind}
+                          {a.kind === 'proposed' && ' — needs approval'}
+                          {a.kind === 'draft' && ' — pending review'}
                         </span>
                       </div>
                     ))}

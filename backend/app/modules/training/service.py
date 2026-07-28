@@ -230,9 +230,13 @@ def _first_waitlisted(db: Session, session_id: int) -> TrainingRegistration | No
 
 
 def propose_waitlist_promotion(db: Session, *, org_id: int, session_id: int,
-                               requested_by_user_id: int | None) -> AgentProposal | None:
-    """Create a promotion proposal. If the org enabled the narrow auto-promote policy and a
-    seat is genuinely free for the #1 waitlisted person, execute it; else require approval."""
+                               requested_by_user_id: int | None,
+                               allow_auto_execute: bool = True) -> AgentProposal | None:
+    """Create a promotion proposal. If the org enabled the narrow auto-promote policy and a seat is
+    genuinely free for the #1 waitlisted person, execute it; else require approval.
+
+    `allow_auto_execute=False` forces an approval-only `proposed` record regardless of org policy —
+    used by the chat assistant, which must never autonomously change records or send email."""
     session = db.get(TrainingSession, session_id)
     if session is None or session.org_id != org_id or not _seats_available(db, session):
         return None
@@ -252,7 +256,7 @@ def propose_waitlist_promotion(db: Session, *, org_id: int, session_id: int,
     db.add(proposal)
     db.flush()
 
-    if _auto_promote_enabled(db, org_id):
+    if allow_auto_execute and _auto_promote_enabled(db, org_id):
         _execute_promotion(db, proposal, candidate, actor_type="agent", actor_id="scheduling")
         proposal.status = ProposalStatus.auto_executed
         db.flush()
