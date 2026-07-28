@@ -220,6 +220,88 @@ def run_chat(db: Session, principal: Principal, messages: list[dict]) -> ChatRes
     return ChatResult(reply=reply, actions=actions, provider=cfg.provider, model=cfg.model)
 
 
+def stream_chat(db: Session, principal: Principal, messages: list[dict]):
+    """Streaming variant: yields events {type: token|action|done|error, ...}. Real token streaming
+    for Ollama; Anthropic falls back to a single emitted reply (still governed + tool-using)."""
+    cfg = resolve_config(db, principal.org_id)
+    if not cfg.enabled:
+        yield {"type": "token", "text": "The AI assistant isn't configured yet. An admin can "
+                                        "enable it in Settings → AI Assistant."}
+        yield {"type": "done", "provider": "off", "model": ""}
+        return
+    tools = _available_tools(db, principal)
+    convo: list[dict] = [{"role": "system", "content": cfg.system_prompt}]
+    for m in messages[-20:]:
+        role, content = m.get("role"), str(m.get("content", ""))[:4000]
+        if role in ("user", "assistant") and content:
+            convo.append({"role": role, "content": content})
+    actions: list[dict] = []
+    try:
+        if cfg.provider == "ollama":
+            yield from _stream_ollama(db, principal, cfg, convo, tools, actions)
+        else:
+            res = run_chat(db, principal, messages)
+            for a in res.actions:
+                yield {"type": "action", **a}
+            yield {"type": "token", "text": res.reply}
+            yield {"type": "done", "provider": res.provider, "model": res.model}
+    except Exception as exc:  # noqa: BLE001 - stream a friendly error, never crash the connection
+        yield {"type": "token", "text": f"The assistant is unreachable right now "
+                                        f"({str(exc)[:120]})."}
+        yield {"type": "done", "provider": f"{cfg.provider}:error", "model": cfg.model}
+
+
+def _stream_ollama(db, principal, cfg: AssistantConfig, convo: list[dict],
+                   tools: dict[str, ChatTool], actions: list[dict]):
+    url = cfg.base_url.rstrip("/") + "/api/chat"
+    headers = {"Content-Type": "application/json"}
+    if cfg.api_key:
+        headers["Authorization"] = f"Bearer {cfg.api_key}"
+    specs = _openai_tool_specs(tools)
+    for _ in range(cfg.max_steps):
+        body: dict = {"model": cfg.model, "messages": convo, "stream": True}
+        if specs:
+            body["tools"] = specs
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers,
+                                     method="POST")
+        content_parts: list[str] = []
+        tool_calls: list[dict] = []
+        with urllib.request.urlopen(req, timeout=cfg.timeout) as resp:  # noqa: S310  # nosec B310
+            for raw in resp:
+                line = raw.strip()
+                if not line:
+                    continue
+                chunk = json.loads(line.decode())
+                msg = chunk.get("message", {})
+                if msg.get("content"):
+                    content_parts.append(msg["content"])
+                    yield {"type": "token", "text": msg["content"]}
+                if msg.get("tool_calls"):
+                    tool_calls.extend(msg["tool_calls"])
+                if chunk.get("done"):
+                    break
+        if not tool_calls:
+            yield {"type": "done", "provider": "ollama", "model": cfg.model}
+            return
+        convo.append({"role": "assistant", "content": "".join(content_parts),
+                      "tool_calls": tool_calls})
+        for tc in tool_calls:
+            fn = tc.get("function", {})
+            args = fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+            before = len(actions)
+            out = _run_tool(db, principal, tools, fn.get("name", ""), args, actions)
+            for a in actions[before:]:
+                yield {"type": "action", **a}
+            convo.append({"role": "tool", "content": out})
+    yield {"type": "token", "text": " (I couldn't finish that in a few steps — try rephrasing.)"}
+    yield {"type": "done", "provider": "ollama", "model": cfg.model}
+
+
 def _run_tool(db: Session, principal: Principal, tools: dict[str, ChatTool], name: str,
               args: dict, actions: list[dict]) -> str:
     tool = tools.get(name)
