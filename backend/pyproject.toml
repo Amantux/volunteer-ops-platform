@@ -25,7 +25,7 @@ dev = [
     "httpx>=0.27",
     # Pin the linter/type-checker so CI and local agree (a new ruff/mypy release changing default
     # rules must be an explicit, reviewed bump — not a surprise red build).
-    "ruff==0.15.22",
+    "ruff==0.16.0",
     "mypy==2.3.0",
 ]
 
@@ -37,7 +37,10 @@ filterwarnings = ["ignore::DeprecationWarning"]
 line-length = 100
 
 [tool.ruff.lint]
-extend-select = ["I"]
+# Pin the rule set explicitly (the historical default E4/E7/E9/F + isort) so a ruff version bump
+# doesn't silently enable new rule families. 0.16 broadened its defaults (bugbear B008 on FastAPI
+# Depends(), RUF, S, …); we opt into rules deliberately, not by upgrade.
+select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
